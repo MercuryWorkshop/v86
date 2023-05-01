@@ -1,69 +1,31 @@
-var performance = {};
-
-
+"use strict";
 
 var global = {};
-var require = function(module) {};
-var process = {};
-var __dirname = "";
-
-var esprima = { tokenize: {}, parse: {} };
-var acorn = { walk: { simple: {} } };
-
-var exports = {};
-var define = {};
-var module = {};
-
-// New Web Audio API
-
-/**
- * @constructor
- * @extends {AudioNode}
- * @param {Object=} options
- */
-var AudioWorkletNode = function(context, name, options)
-{
-    this.port =
-    {
-        /**
-         * @param {Object} data
-         * @param {Object=} transfer
-         */
-        postMessage: function(data, transfer) {}
-    };
-};
-
-/**
- * @constructor
- */
-var AudioWorkletProcessor = function()
-{
-    this.port =
-    {
-        /**
-         * @param {Object} data
-         * @param {Object=} transfer
-         */
-        postMessage: function(data, transfer) {}
-    };
-}
-
-var AudioWorklet = function() {};
-
-AudioContext.prototype.audioWorklet =
-{
-    /** @return {Promise} */
-    addModule: function(file) {}
-};
+var process = { hrtime: function() {} };
 
 /**
  * @param {string} name
  * @param {function()} processor
  */
-var registerProcessor = function(name, processor) {}
-
-/** @const */
-var currentTime = 0;
+var registerProcessor = function(name, processor) {};
 
 /** @const */
 var sampleRate = 0;
+
+var WabtModule = {
+    readWasm: function(buf, opt) {},
+    generateNames: function() {},
+    applyNames: function() {},
+    toText: function() {},
+};
+var cs = {
+    Capstone: function() {},
+    ARCH_X86: 0,
+    MODE_16: 0,
+    MODE_32: 0,
+    disasm: { bytes: "", mnemonic: "", op_str: "", },
+};
+
+const Buffer = {
+    allocUnsafe : function(length) {},
+};

@@ -8,6 +8,8 @@
 window.onload = function()
 {
     var emulator = new V86Starter({
+        wasm_path: "../build/v86.wasm",
+
         // Uncomment to see what's going on
         //screen_container: document.getElementById("screen_container"),
 
@@ -17,9 +19,13 @@ window.onload = function()
         vga_bios: {
             url: "../bios/vgabios.bin",
         },
-        cdrom: {
-            url: "../images/linux.iso",
+        bzimage: {
+            url: "../images/buildroot-bzimage.bin",
+            size: 5166352,
+            async: false,
         },
+        filesystem: {},
+        cmdline: "tsc=reliable mitigations=off random.trust_cpu=on",
         autostart: true,
         disable_keyboard: true,
     });
@@ -31,15 +37,11 @@ window.onload = function()
 
     var stages = [
         {
-            test: "login:",
-            send: "root\n",
-        },
-        {
-            test: "/root% ",
+            test: "~% ",
             send: "ls -1 --color=never /\n",
         },
         {
-            test: "/root% ",
+            test: "~% ",
             send: "lua -e 'print(3+4)'\n",
         },
     ];

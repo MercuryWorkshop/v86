@@ -8,6 +8,7 @@
 window.onload = function()
 {
     var emulator = new V86Starter({
+        wasm_path: "../build/v86.wasm",
         memory_size: 32 * 1024 * 1024,
         vga_memory_size: 2 * 1024 * 1024,
 
@@ -20,14 +21,16 @@ window.onload = function()
         vga_bios: {
             url: "../bios/vgabios.bin",
         },
-        cdrom: {
-            url: "../images/linux.iso",
+        bzimage: {
+            url: "../images/buildroot-bzimage.bin",
         },
         autostart: true,
         disable_keyboard: true,
+        disable_mouse: true,
     });
 
     var data = "";
+    var do_output = false;
 
     emulator.add_listener("serial0-output-char", function(char)
     {
@@ -36,29 +39,17 @@ window.onload = function()
             data += char;
         }
 
-        if(data.endsWith("login: "))
+        if(do_output)
         {
-            console.log("Do login");
-            emulator.serial0_send("root\n");
+            document.getElementById("result").textContent += char;
         }
-        else if(data.endsWith("/root% "))
+
+        if(data.endsWith("~% "))
         {
             console.log("Now ready");
             document.getElementById("status").textContent = "Ready.\n";
             document.getElementById("run").disabled = false;
-        }
-    });
-
-    emulator.add_listener("serial0-output-line", function(line)
-    {
-        // filter noise
-        if(!line.startsWith("/root% lua -e") &&
-           !line.startsWith("> ") &&
-           line.indexOf("Welcome to Buildroot") === -1 &&
-           line.indexOf("login:") === -1 &&
-           line.trim() !== "")
-        {
-            document.getElementById("result").textContent += line;
+            do_output = false;
         }
     });
 
@@ -79,6 +70,8 @@ window.onload = function()
         document.getElementById("result").textContent = "";
         document.getElementById("status").textContent = "Running ...\n";
         this.disabled = true;
+
+        do_output = true;
     };
 };
 
@@ -86,6 +79,7 @@ window.onload = function()
 // Implement bash string escaping.
 function bashEscape(arg)
 {
+    arg = arg.replace(/\t+/g, "");
     return "'" + arg.replace(/'+/g, function (val) {
         return "'" + val.replace(/'/g, "\\'") + "'";
     }) + "'";

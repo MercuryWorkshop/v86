@@ -12,7 +12,7 @@ function readfile(path)
 console.log("Use F2 to save the state and F3 to restore.");
 
 var bios = readfile(__dirname + "/../bios/seabios.bin");
-var linux = readfile(__dirname + "/../images/linux.iso");
+var linux = readfile(__dirname + "/../images/linux4.iso");
 
 process.stdin.setRawMode(true);
 process.stdin.resume();
@@ -28,12 +28,15 @@ var emulator = new V86Starter({
 
 emulator.add_listener("serial0-output-char", function(chr)
 {
-    process.stdout.write(chr);
+    if(chr <= "~")
+    {
+        process.stdout.write(chr);
+    }
 });
 
 var state;
 
-process.stdin.on("data", function(c)
+process.stdin.on("data", async function(c)
 {
     if(c === "\u0003")
     {
@@ -44,16 +47,8 @@ process.stdin.on("data", function(c)
     else if(c === "\x1b\x4f\x51")
     {
         // f2
-        emulator.save_state(function(err, s)
-        {
-            console.log("--- Saved ---");
-            if(err)
-            {
-                throw err;
-            }
-
-            state = s;
-        });
+        state = await emulator.save_state();
+        console.log("--- Saved ---");
     }
     else if(c === "\x1b\x4f\x52")
     {
@@ -61,7 +56,7 @@ process.stdin.on("data", function(c)
         if(state)
         {
             console.log("--- Restored ---");
-            emulator.restore_state(state);
+            await emulator.restore_state(state);
         }
     }
     else

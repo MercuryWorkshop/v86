@@ -111,7 +111,7 @@ function KeyboardAdapter(bus)
      * ascii -> javascript event code (US layout)
      * @const
      */
-    var asciimap = {10: 13, 32: 32, 39: 222, 44: 188, 45: 189, 46: 190, 47: 191, 48: 48, 49: 49, 50: 50, 51: 51, 52: 52, 53: 53, 54: 54, 55: 55, 56: 56, 57: 57, 59: 186, 61: 187, 91: 219, 92: 220, 93: 221, 96: 192, 97: 65, 98: 66, 99: 67, 100: 68, 101: 69, 102: 70, 103: 71, 104: 72, 105: 73, 106: 74, 107: 75, 108: 76, 109: 77, 110: 78, 111: 79, 112: 80, 113: 81, 114: 82, 115: 83, 116: 84, 117: 85, 118: 86, 119: 87, 120: 88, 121: 89, 122: 90};
+    var asciimap = {8: 8, 10: 13, 32: 32, 39: 222, 44: 188, 45: 189, 46: 190, 47: 191, 48: 48, 49: 49, 50: 50, 51: 51, 52: 52, 53: 53, 54: 54, 55: 55, 56: 56, 57: 57, 59: 186, 61: 187, 91: 219, 92: 220, 93: 221, 96: 192, 97: 65, 98: 66, 99: 67, 100: 68, 101: 69, 102: 70, 103: 71, 104: 72, 105: 73, 106: 74, 107: 75, 108: 76, 109: 77, 110: 78, 111: 79, 112: 80, 113: 81, 114: 82, 115: 83, 116: 84, 117: 85, 118: 86, 119: 87, 120: 88, 121: 89, 122: 90};
     var asciimap_shift = {33: 49, 34: 222, 35: 51, 36: 52, 37: 53, 38: 55, 40: 57, 41: 48, 42: 56, 43: 187, 58: 186, 60: 188, 62: 190, 63: 191, 64: 50, 65: 65, 66: 66, 67: 67, 68: 68, 69: 69, 70: 70, 71: 71, 72: 72, 73: 73, 74: 74, 75: 75, 76: 76, 77: 77, 78: 78, 79: 79, 80: 80, 81: 81, 82: 82, 83: 83, 84: 84, 85: 85, 86: 86, 87: 87, 88: 88, 89: 89, 90: 90, 94: 54, 95: 189, 123: 219, 124: 220, 125: 221, 126: 192};
 
     // From:
@@ -174,6 +174,7 @@ function KeyboardAdapter(bus)
         "Comma": 0x0033,
         "Period": 0x0034,
         "Slash": 0x0035,
+        "IntlRo": 0x0035,
         "ShiftRight": 0x0036,
         "NumpadMultiply": 0x0037,
         "AltLeft": 0x0038,
@@ -213,7 +214,7 @@ function KeyboardAdapter(bus)
         "NumpadDivide": 0xe035,
         //"PrintScreen": 0x0063,
         "AltRight": 0xe038,
-        "Home": 0xe04f,
+        "Home": 0xe047,
         "ArrowUp": 0xe048,
         "PageUp": 0xe049,
         "ArrowLeft": 0xe04b,
@@ -284,7 +285,7 @@ function KeyboardAdapter(bus)
 
     function may_handle(e)
     {
-        if(e.shiftKey && e.ctrlKey && (e.keyCode === 74 || e.keyCode === 75))
+        if(e.shiftKey && e.ctrlKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 75))
         {
               // don't prevent opening chromium dev tools
               // maybe add other important combinations here, too
@@ -299,7 +300,7 @@ function KeyboardAdapter(bus)
         if(e.target)
         {
             // className shouldn't be hardcoded here
-            return e.target.className === "phone_keyboard" ||
+            return e.target.classList.contains("phone_keyboard") ||
                 (e.target.nodeName !== "INPUT" && e.target.nodeName !== "TEXTAREA");
         }
         else
@@ -383,11 +384,11 @@ function KeyboardAdapter(bus)
 
         if(!code)
         {
-            console.log("Missing char in map: " + e.keyCode.toString(16));
+            console.log("Missing char in map: keyCode=" + (e.keyCode || -1).toString(16) + " code=" + e.code);
             return;
         }
 
-        handle_code(code, keydown);
+        handle_code(code, keydown, e.repeat);
 
         e.preventDefault && e.preventDefault();
 
@@ -397,12 +398,13 @@ function KeyboardAdapter(bus)
     /**
      * @param {number} code
      * @param {boolean} keydown
+     * @param {boolean=} is_repeat
      */
-    function handle_code(code, keydown)
+    function handle_code(code, keydown, is_repeat)
     {
         if(keydown)
         {
-            if(keys_pressed[code])
+            if(keys_pressed[code] && !is_repeat)
             {
                 handle_code(code, false);
             }

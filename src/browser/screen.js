@@ -1,15 +1,7 @@
 "use strict";
 
-if(typeof window !== "undefined" && !window.requestAnimationFrame)
-{
-    window.requestAnimationFrame =
-        window.mozRequestAnimationFrame ||
-        window.webkitRequestAnimationFrame;
-}
-
-
 /**
- * Adapter to use visual screen in browsers (in constrast to node)
+ * Adapter to use visual screen in browsers (in contrast to node)
  * @constructor
  *
  * @param {BusConnector} bus
@@ -20,16 +12,12 @@ function ScreenAdapter(screen_container, bus)
 
     var
         graphic_screen = screen_container.getElementsByTagName("canvas")[0],
-        graphic_context = graphic_screen.getContext("2d"),
+        graphic_context = graphic_screen.getContext("2d", { alpha: false }),
 
         text_screen = screen_container.getElementsByTagName("div")[0],
         cursor_element = document.createElement("div");
 
     var
-        graphic_image_data,
-        graphic_buffer,
-        graphic_buffer32,
-
         /** @type {number} */
         cursor_row,
 
@@ -42,11 +30,7 @@ function ScreenAdapter(screen_container, bus)
         /** @type {number} */
         scale_y = 1,
 
-        graphical_mode_width,
-        graphical_mode_height,
-
-        modified_pixel_min = 0,
-        modified_pixel_max = 0,
+        base_scale = 1,
 
         changed_rows,
 
@@ -64,22 +48,24 @@ function ScreenAdapter(screen_container, bus)
         // number of rows
         text_mode_height;
 
+    var stopped = false;
+
     var screen = this;
 
     // 0x12345 -> "#012345"
     function number_as_color(n)
     {
         n = n.toString(16);
-
-        return "#" + Array(7 - n.length).join("0") + n;
+        return "#" + "0".repeat(6 - n.length) + n;
     }
 
 
     /**
-     * Charmaps that containt unicode sequences for the default dospage
+     * Charmaps that constraint unicode sequences for the default dospage
      * @const
      */
     var charmap_high = new Uint16Array([
+        0x2302,
         0xC7, 0xFC, 0xE9, 0xE2, 0xE4, 0xE0, 0xE5, 0xE7,
         0xEA, 0xEB, 0xE8, 0xEF, 0xEE, 0xEC, 0xC4, 0xC5,
         0xC9, 0xE6, 0xC6, 0xF4, 0xF6, 0xF2, 0xFB, 0xF9,
@@ -111,9 +97,9 @@ function ScreenAdapter(screen_container, bus)
 
     for(var i = 0; i < 256; i++)
     {
-        if(i > 127)
+        if(i > 126)
         {
-            chr = charmap_high[i - 0x80];
+            chr = charmap_high[i - 0x7F];
         }
         else if(i < 32)
         {
@@ -127,7 +113,7 @@ function ScreenAdapter(screen_container, bus)
         charmap[i] = String.fromCharCode(chr);
     }
 
-    graphic_context["imageSmoothingEnabled"] = false;
+    graphic_context.imageSmoothingEnabled = false;
 
     cursor_element.style.position = "absolute";
     cursor_element.style.backgroundColor = "#ccc";
@@ -190,10 +176,51 @@ function ScreenAdapter(screen_container, bus)
 
     this.make_screenshot = function()
     {
-        try {
-            window.open(graphic_screen.toDataURL());
+        const image = new Image();
+
+        if(is_graphical)
+        {
+            image.src = graphic_screen.toDataURL("image/png");
         }
-        catch(e) {}
+        else
+        {
+            // Default 720x400, but can be [8, 16] at 640x400
+            const char_size = [9, 16];
+
+            const canvas = document.createElement("canvas");
+            canvas.width = text_mode_width * char_size[0];
+            canvas.height = text_mode_height * char_size[1];
+            const context = canvas.getContext("2d");
+            context.imageSmoothingEnabled = false;
+            context.font = window.getComputedStyle(text_screen).font;
+            context.textBaseline = "top";
+
+            for(let x = 0; x < text_mode_width; x++)
+            {
+                for(let y = 0; y < text_mode_height; y++)
+                {
+                    const index = (y * text_mode_width + x) * 3;
+                    context.fillStyle = number_as_color(text_mode_data[index + 1]);
+                    context.fillRect(x * char_size[0], y * char_size[1], char_size[0], char_size[1]);
+                    context.fillStyle = number_as_color(text_mode_data[index + 2]);
+                    context.fillText(charmap[text_mode_data[index]], x * char_size[0], y * char_size[1]);
+                }
+            }
+
+            if(cursor_element.style.display !== "none")
+            {
+                context.fillStyle = cursor_element.style.backgroundColor;
+                context.fillRect(
+                    cursor_col * char_size[0],
+                    cursor_row * char_size[1] + parseInt(cursor_element.style.marginTop, 10) - 1,
+                    parseInt(cursor_element.style.width, 10),
+                    parseInt(cursor_element.style.height, 10)
+                );
+            }
+
+            image.src = canvas.toDataURL("image/png");
+        }
+        return image;
     };
 
     this.put_char = function(row, col, chr, bg_color, fg_color)
@@ -202,6 +229,7 @@ function ScreenAdapter(screen_container, bus)
         {
             var p = 3 * (row * text_mode_width + col);
 
+            dbg_assert(chr >= 0 && chr < 0x100);
             text_mode_data[p] = chr;
             text_mode_data[p + 1] = bg_color;
             text_mode_data[p + 2] = fg_color;
@@ -212,7 +240,10 @@ function ScreenAdapter(screen_container, bus)
 
     this.timer = function()
     {
-        requestAnimationFrame(is_graphical ? update_graphical : update_text);
+        if(!stopped)
+        {
+            requestAnimationFrame(is_graphical ? update_graphical : update_text);
+        }
     };
 
     var update_text = function()
@@ -237,6 +268,7 @@ function ScreenAdapter(screen_container, bus)
 
     this.destroy = function()
     {
+        stopped = true;
     };
 
     this.set_mode = function(graphical)
@@ -312,20 +344,16 @@ function ScreenAdapter(screen_container, bus)
         graphic_screen.width = width;
         graphic_screen.height = height;
 
-        //graphic_screen.style.width = width * scale_x + "px";
-        //graphic_screen.style.height = height * scale_y + "px";
+        // add some scaling to tiny resolutions
+        if(width <= 640 && width * 2 < window.innerWidth && width * 2 < window.innerHeight)
+        {
+            base_scale = 2;
+        }
+        else
+        {
+            base_scale = 1;
+        }
 
-        // Make sure to call this here, because pixels are transparent otherwise
-        //screen.clear_screen();
-
-        graphic_image_data = graphic_context.createImageData(buffer_width, buffer_height);
-        graphic_buffer = new Uint8Array(graphic_image_data.data.buffer);
-        graphic_buffer32 = new Int32Array(graphic_image_data.data.buffer);
-
-        graphical_mode_width = width;
-        graphical_mode_height = height;
-
-        this.bus.send("screen-tell-buffer", [graphic_buffer32], [graphic_buffer32.buffer]);
         update_scale_graphic();
     };
 
@@ -346,7 +374,7 @@ function ScreenAdapter(screen_container, bus)
 
     function update_scale_graphic()
     {
-        elem_set_scale(graphic_screen, scale_x, scale_y, false);
+        elem_set_scale(graphic_screen, scale_x * base_scale, scale_y * base_scale, false);
     }
 
     function elem_set_scale(elem, scale_x, scale_y, use_scale)
@@ -356,7 +384,7 @@ function ScreenAdapter(screen_container, bus)
 
         if(use_scale)
         {
-            elem.style.transform = elem.style.webkitTransform = elem.style.MozTransform = "";
+            elem.style.transform = "";
         }
 
         var rectangle = elem.getBoundingClientRect();
@@ -368,18 +396,15 @@ function ScreenAdapter(screen_container, bus)
             scale_str += scale_x === 1 ? "" : " scaleX(" + scale_x + ")";
             scale_str += scale_y === 1 ? "" : " scaleY(" + scale_y + ")";
 
-            elem.style.transform = elem.style.webkitTransform = elem.style.MozTransform = scale_str;
+            elem.style.transform = scale_str;
         }
         else
         {
             // unblur non-fractional scales
             if(scale_x % 1 === 0 && scale_y % 1 === 0)
             {
-                graphic_screen.style.imageRendering = "-moz-crisp-edges";
-                graphic_screen.style.imageRendering = "moz-crisp-edges";
-                graphic_screen.style.imageRendering = "webkit-optimize-contrast";
-                graphic_screen.style.imageRendering = "o-crisp-edges";
-                graphic_screen.style.imageRendering = "pixelated";
+                graphic_screen.style["imageRendering"] = "crisp-edges"; // firefox
+                graphic_screen.style["imageRendering"] = "pixelated";
                 graphic_screen.style["-ms-interpolation-mode"] = "nearest-neighbor";
             }
             else
@@ -468,6 +493,7 @@ function ScreenAdapter(screen_container, bus)
                 var ascii = text_mode_data[offset];
 
                 text += charmap[ascii];
+                dbg_assert(charmap[ascii]);
 
                 i++;
                 offset += 3;
@@ -500,19 +526,11 @@ function ScreenAdapter(screen_container, bus)
     {
         if(DEBUG_SCREEN_LAYERS)
         {
-            // Draw the entire buffer. Useful for debugging
-            // panning / page flipping / screen splitting code for both
-            // v86 developers and os developers
-            graphic_context.putImageData(
-                graphic_image_data,
-                0, 0
-            );
-
             // For each visible layer that would've been drawn, draw a
             // rectangle to visualise the layer instead.
             graphic_context.strokeStyle = "#0F0";
             graphic_context.lineWidth = 4;
-            layers.forEach((layer) =>
+            layers.forEach(layer =>
             {
                 graphic_context.strokeRect(
                     layer.buffer_x,
@@ -525,10 +543,10 @@ function ScreenAdapter(screen_container, bus)
             return;
         }
 
-        layers.forEach((layer) =>
+        layers.forEach(layer =>
         {
             graphic_context.putImageData(
-                graphic_image_data,
+                layer.image_data,
                 layer.screen_x - layer.buffer_x,
                 layer.screen_y - layer.buffer_y,
                 layer.buffer_x,
@@ -541,5 +559,3 @@ function ScreenAdapter(screen_container, bus)
 
     this.init();
 }
-
-

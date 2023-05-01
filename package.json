@@ -1,9 +1,0 @@
-{
-  "license": "BSD-2-Clause",
-  "main": "build/libv86.js",
-  "name": "v86",
-  "scripts": {
-    "build": "make build/libv86.js"
-  },
-  "version": "1.0.1"
-}

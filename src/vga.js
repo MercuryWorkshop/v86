@@ -21,9 +21,6 @@ var
 //var VGA_LFB_ADDRESS = 0xFE000000; // set by seabios
 var VGA_LFB_ADDRESS = 0xE0000000;
 
-/** @const */
-var VGA_PIXEL_BUFFER_START = 4 * VGA_BANK_SIZE;
-
 /**
  * @const
  * Equals the maximum number of pixels for non svga.
@@ -32,7 +29,7 @@ var VGA_PIXEL_BUFFER_START = 4 * VGA_BANK_SIZE;
 var VGA_PIXEL_BUFFER_SIZE = 8 * VGA_BANK_SIZE;
 
 /** @const */
-var VGA_MIN_MEMORY_SIZE = VGA_PIXEL_BUFFER_START + VGA_PIXEL_BUFFER_SIZE;
+var VGA_MIN_MEMORY_SIZE = 4 * VGA_BANK_SIZE;
 
 /**
  * @const
@@ -64,6 +61,8 @@ var VGA_HOST_MEMORY_SPACE_SIZE = Uint32Array.from([
  */
 function VGAScreen(cpu, bus, vga_memory_size)
 {
+    this.cpu = cpu;
+
     /** @const @type {BusConnector} */
     this.bus = bus;
 
@@ -193,6 +192,9 @@ function VGAScreen(cpu, bus, vga_memory_size)
     this.latch_dword = 0;
 
     /** @type {number} */
+    this.svga_version = 0xB0C5;
+
+    /** @type {number} */
     this.svga_width = 0;
 
     /** @type {number} */
@@ -213,14 +215,16 @@ function VGAScreen(cpu, bus, vga_memory_size)
      */
     this.svga_offset = 0;
 
+    const pci_revision = 0; // set to 2 for qemu extended registers
+
     // Experimental, could probably need some changes
     // 01:00.0 VGA compatible controller: NVIDIA Corporation GT216 [GeForce GT 220] (rev a2)
     this.pci_space = [
-        0xde, 0x10, 0x20, 0x0a, 0x07, 0x00, 0x00, 0x00,  0xa2, 0x00, 0x00, 0x03, 0x00, 0x00, 0x80, 0x00,
+        0x34, 0x12, 0x11, 0x11, 0x03, 0x01, 0x00, 0x00, pci_revision, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00,
         0x08, VGA_LFB_ADDRESS >>> 8, VGA_LFB_ADDRESS >>> 16, VGA_LFB_ADDRESS >>> 24,
-                                0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00, 0x0a, 0x01, 0x00, 0x00,
+                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xbf, 0xfe, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf4, 0x1a, 0x00, 0x11,
+        0x00, 0x00, 0xbe, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
     this.pci_id = 0x12 << 3;
     this.pci_bars = [
@@ -254,6 +258,8 @@ function VGAScreen(cpu, bus, vga_memory_size)
     this.dac_color_index_write = 0;
     this.dac_color_index_read = 0;
     this.dac_state = 0;
+
+    this.dac_mask = 0xFF;
 
     this.dac_map = new Uint8Array(0x10);
 
@@ -307,6 +313,8 @@ function VGAScreen(cpu, bus, vga_memory_size)
     io.register_read(0x3CE, this, this.port3CE_read);
     io.register_read(0x3CF, this, this.port3CF_read);
 
+    io.register_read(0x3C6, this, this.port3C6_read);
+    io.register_write(0x3C6, this, this.port3C6_write);
     io.register_write(0x3C7, this, this.port3C7_write);
     io.register_read(0x3C7, this, this.port3C7_read);
     io.register_write(0x3C8, this, this.port3C8_write);
@@ -318,7 +326,10 @@ function VGAScreen(cpu, bus, vga_memory_size)
 
     io.register_write_consecutive(0x3D4, this, this.port3D4_write, this.port3D5_write);
     io.register_read(0x3D4, this, this.port3D4_read);
-    io.register_read(0x3D5, this, this.port3D5_read);
+    io.register_read(0x3D5, this, this.port3D5_read, () => {
+        dbg_log("Warning: 16-bit read from 3D5", LOG_VGA);
+        return this.port3D5_read();
+    });
 
     io.register_read(0x3CA, this, function() { dbg_log("3CA read", LOG_VGA); return 0; });
 
@@ -348,50 +359,33 @@ function VGAScreen(cpu, bus, vga_memory_size)
         this.vga_memory_size++;
     }
 
-    this.svga_memory = new Uint8Array(this.vga_memory_size);
+
+    const vga_offset = cpu.svga_allocate_memory(this.vga_memory_size);
+    this.svga_memory = v86util.view(Uint8Array, cpu.wasm_memory, vga_offset, this.vga_memory_size);
 
     this.diff_addr_min = this.vga_memory_size;
     this.diff_addr_max = 0;
     this.diff_plot_min = this.vga_memory_size;
     this.diff_plot_max = 0;
 
-    this.dest_buffer = undefined;
-
-    bus.register("screen-tell-buffer", function(data)
-    {
-        if(this.dest_buffer && data[0])
-        {
-            data[0].set(this.dest_buffer.subarray(0, data[0].length));
-        }
-        this.dest_buffer = data[0];
-    }, this);
+    this.image_data = null;
 
     bus.register("screen-fill-buffer", function()
     {
         this.screen_fill_buffer();
     }, this);
 
-
-    this.svga_memory16 = new Uint16Array(this.svga_memory.buffer);
-    this.svga_memory32 = new Int32Array(this.svga_memory.buffer);
-    this.vga_memory = new Uint8Array(this.svga_memory.buffer, 0, 4 * VGA_BANK_SIZE);
-    this.plane0 = new Uint8Array(this.svga_memory.buffer, 0 * VGA_BANK_SIZE, VGA_BANK_SIZE);
-    this.plane1 = new Uint8Array(this.svga_memory.buffer, 1 * VGA_BANK_SIZE, VGA_BANK_SIZE);
-    this.plane2 = new Uint8Array(this.svga_memory.buffer, 2 * VGA_BANK_SIZE, VGA_BANK_SIZE);
-    this.plane3 = new Uint8Array(this.svga_memory.buffer, 3 * VGA_BANK_SIZE, VGA_BANK_SIZE);
-    this.pixel_buffer = new Uint8Array(this.svga_memory.buffer,
-        VGA_PIXEL_BUFFER_START, VGA_PIXEL_BUFFER_SIZE);
+    this.vga_memory = new Uint8Array(4 * VGA_BANK_SIZE);
+    this.plane0 = new Uint8Array(this.vga_memory.buffer, 0 * VGA_BANK_SIZE, VGA_BANK_SIZE);
+    this.plane1 = new Uint8Array(this.vga_memory.buffer, 1 * VGA_BANK_SIZE, VGA_BANK_SIZE);
+    this.plane2 = new Uint8Array(this.vga_memory.buffer, 2 * VGA_BANK_SIZE, VGA_BANK_SIZE);
+    this.plane3 = new Uint8Array(this.vga_memory.buffer, 3 * VGA_BANK_SIZE, VGA_BANK_SIZE);
+    this.pixel_buffer = new Uint8Array(VGA_PIXEL_BUFFER_SIZE);
 
     var me = this;
     io.mmap_register(0xA0000, 0x20000,
         function(addr) { return me.vga_memory_read(addr); },
         function(addr, value) { me.vga_memory_write(addr, value); }
-    );
-    io.mmap_register(VGA_LFB_ADDRESS, this.vga_memory_size,
-        function(addr) { return me.svga_memory_read8(addr); },
-        function(addr, value) { me.svga_memory_write8(addr, value); },
-        function(addr) { return me.svga_memory_read32(addr); },
-        function(addr, value) { me.svga_memory_write32(addr, value); }
     );
 
     cpu.devices.pci.register_device(this);
@@ -407,7 +401,7 @@ VGAScreen.prototype.get_state = function()
     state[3] = this.cursor_scanline_end;
     state[4] = this.max_cols;
     state[5] = this.max_rows;
-    state[6] = this.layers;
+    state[6] = this.vga_memory;
     state[7] = this.dac_state;
     state[8] = this.start_address;
     state[9] = this.graphical_mode;
@@ -462,6 +456,8 @@ VGAScreen.prototype.get_state = function()
     state[58] = this.color_select;
     state[59] = this.clocking_mode;
     state[60] = this.line_compare;
+    state[61] = this.pixel_buffer;
+    state[62] = this.dac_mask;
 
     return state;
 };
@@ -474,7 +470,7 @@ VGAScreen.prototype.set_state = function(state)
     this.cursor_scanline_end = state[3];
     this.max_cols = state[4];
     this.max_rows = state[5];
-    this.layers = state[6];
+    state[6] && this.vga_memory.set(state[6]);
     this.dac_state = state[7];
     this.start_address = state[8];
     this.graphical_mode = state[9];
@@ -529,6 +525,8 @@ VGAScreen.prototype.set_state = function(state)
     this.color_select = state[58];
     this.clocking_mode = state[59];
     this.line_compare = state[60];
+    state[61] && this.pixel_buffer.set(state[61]);
+    this.dac_mask = state[62] === undefined ? 0xFF : state[62];
 
     this.bus.send("screen-set-mode", this.graphical_mode);
 
@@ -547,6 +545,7 @@ VGAScreen.prototype.set_state = function(state)
         else
         {
             this.update_vga_size();
+            this.update_layers();
             this.complete_replot();
         }
     }
@@ -563,10 +562,7 @@ VGAScreen.prototype.vga_memory_read = function(addr)
 {
     if(this.svga_enabled && this.graphical_mode_is_linear)
     {
-        addr -= 0xA0000;
-        addr |= this.svga_bank_offset;
-
-        return this.svga_memory[addr];
+        return this.cpu.read8((addr - 0xA0000 | this.svga_bank_offset) + VGA_LFB_ADDRESS | 0);
     }
 
     var memory_space_select = this.miscellaneous_graphics_register >> 2 & 0x3;
@@ -639,8 +635,7 @@ VGAScreen.prototype.vga_memory_write = function(addr, value)
     if(this.svga_enabled && this.graphical_mode && this.graphical_mode_is_linear)
     {
         // vbe banked mode
-        addr -= 0xA0000;
-        this.vga_memory_write_graphical_linear(addr, value);
+        this.cpu.write8((addr - 0xA0000 | this.svga_bank_offset) + VGA_LFB_ADDRESS | 0, value);
         return;
     }
 
@@ -666,16 +661,6 @@ VGAScreen.prototype.vga_memory_write = function(addr, value)
         }
         this.vga_memory_write_text_mode(addr, value);
     }
-};
-
-VGAScreen.prototype.vga_memory_write_graphical_linear = function(addr, value)
-{
-    addr |= this.svga_bank_offset;
-
-    this.diff_addr_min = addr < this.diff_addr_min ? addr : this.diff_addr_min;
-    this.diff_addr_max = addr > this.diff_addr_max ? addr : this.diff_addr_max;
-
-    this.svga_memory[addr] = value;
 };
 
 VGAScreen.prototype.vga_memory_write_graphical = function(addr, value)
@@ -858,7 +843,8 @@ VGAScreen.prototype.text_mode_redraw = function()
             color = this.vga_memory[addr | 1];
 
             this.bus.send("screen-put-char", [row, col, chr,
-                this.vga256_palette[color >> 4 & 0xF], this.vga256_palette[color & 0xF]]);
+                this.vga256_palette[this.dac_mask & this.dac_map[color >> 4 & 0xF]],
+                this.vga256_palette[this.dac_mask & this.dac_map[color & 0xF]]]);
 
             addr += 2;
         }
@@ -886,7 +872,8 @@ VGAScreen.prototype.vga_memory_write_text_mode = function(addr, value)
     }
 
     this.bus.send("screen-put-char", [row, col, chr,
-            this.vga256_palette[color >> 4 & 0xF], this.vga256_palette[color & 0xF]]);
+        this.vga256_palette[this.dac_mask & this.dac_map[color >> 4 & 0xF]],
+        this.vga256_palette[this.dac_mask & this.dac_map[color & 0xF]]]);
 
     this.vga_memory[addr] = value;
 };
@@ -901,62 +888,19 @@ VGAScreen.prototype.update_cursor = function()
     this.bus.send("screen-update-cursor", [row, col]);
 };
 
-VGAScreen.prototype.svga_memory_read8 = function(addr)
-{
-    return this.svga_memory[addr & 0xFFFFFFF];
-};
-
-VGAScreen.prototype.svga_memory_read32 = function(addr)
-{
-    addr &= 0xFFFFFFF;
-
-    if(addr & 3)
-    {
-        return this.svga_memory[addr] | this.svga_memory[addr + 1] << 8 |
-               this.svga_memory[addr + 2] << 16 | this.svga_memory[addr + 3] << 24;
-    }
-    else
-    {
-        return this.svga_memory32[addr >> 2];
-    }
-};
-
-VGAScreen.prototype.svga_memory_write8 = function(addr, value)
-{
-    addr &= 0xFFFFFFF;
-    this.svga_memory[addr] = value;
-
-    this.diff_addr_min = addr < this.diff_addr_min ? addr : this.diff_addr_min;
-    this.diff_addr_max = addr > this.diff_addr_max ? addr : this.diff_addr_max;
-};
-
-VGAScreen.prototype.svga_memory_write32 = function(addr, value)
-{
-    addr &= 0xFFFFFFF;
-
-    this.diff_addr_min = addr < this.diff_addr_min ? addr : this.diff_addr_min;
-    this.diff_addr_max = addr + 3 > this.diff_addr_max ? addr + 3 : this.diff_addr_max;
-
-    this.svga_memory[addr] = value;
-    this.svga_memory[addr + 1] = value >> 8;
-    this.svga_memory[addr + 2] = value >> 16;
-    this.svga_memory[addr + 3] = value >> 24;
-};
-
 VGAScreen.prototype.complete_redraw = function()
 {
     dbg_log("complete redraw", LOG_VGA);
 
     if(this.graphical_mode)
     {
-        this.diff_addr_min = 0;
-
         if(this.svga_enabled)
         {
-            this.diff_addr_max = this.vga_memory_size;
+            this.cpu.svga_mark_dirty();
         }
         else
         {
+            this.diff_addr_min = 0;
             this.diff_addr_max = VGA_PIXEL_BUFFER_SIZE;
         }
     }
@@ -1157,6 +1101,21 @@ VGAScreen.prototype.set_size_graphical = function(width, height, bpp, virtual_wi
         this.stats.res_x = width;
         this.stats.res_y = height;
 
+        if (typeof ImageData !== "undefined")
+        {
+            const size = virtual_width * virtual_height;
+            const offset = this.cpu.svga_allocate_dest_buffer(size) >>> 0;
+
+            this.dest_buffet_offset = offset;
+            this.image_data = new ImageData(new Uint8ClampedArray(this.cpu.wasm_memory.buffer, offset, 4 * size), virtual_width, virtual_height);
+
+            this.cpu.svga_mark_dirty();
+        }
+        else
+        {
+            // TODO: nodejs
+        }
+
         this.bus.send("screen-set-size-graphical", [width, height, virtual_width, virtual_height, bpp]);
     }
 };
@@ -1287,6 +1246,7 @@ VGAScreen.prototype.update_layers = function()
     for(var x = -start_buffer_col, y = 0; x < this.screen_width; x += this.virtual_width, y++)
     {
         this.layers.push({
+            image_data: this.image_data,
             screen_x: x,
             screen_y: 0,
             buffer_x: 0,
@@ -1306,6 +1266,7 @@ VGAScreen.prototype.update_layers = function()
     for(var x = -start_split_col, y = 0; x < this.screen_width; x += this.virtual_width, y++)
     {
         this.layers.push({
+            image_data: this.image_data,
             screen_x: x,
             screen_y: split_screen_row,
             buffer_x: 0,
@@ -1450,7 +1411,7 @@ VGAScreen.prototype.port3C1_read = function()
     {
         dbg_log("3C1 / internal palette read: " + h(this.attribute_controller_index) +
             " -> " + h(this.dac_map[this.attribute_controller_index]), LOG_VGA);
-        return this.dac_map[this.attribute_controller_index];
+        return this.dac_map[this.attribute_controller_index] & 0xFF;
     }
 
     switch(this.attribute_controller_index)
@@ -1470,7 +1431,7 @@ VGAScreen.prototype.port3C1_read = function()
         default:
             dbg_log("3C1 / attribute controller read " + h(this.attribute_controller_index), LOG_VGA);
     }
-    return -1;
+    return 0xFF;
 
 };
 
@@ -1542,6 +1503,16 @@ VGAScreen.prototype.port3C5_read = function()
     return 0;
 };
 
+VGAScreen.prototype.port3C6_write = function(data)
+{
+    this.dac_mask = data;
+};
+
+VGAScreen.prototype.port3C6_read = function()
+{
+    return this.dac_mask;
+};
+
 VGAScreen.prototype.port3C7_write = function(index)
 {
     // index for reading the DAC
@@ -1564,7 +1535,7 @@ VGAScreen.prototype.port3C8_write = function(index)
 
 VGAScreen.prototype.port3C8_read = function()
 {
-    return this.dac_color_index_write / 3 | 0;
+    return this.dac_color_index_write / 3 & 0xFF;
 };
 
 /**
@@ -1579,7 +1550,12 @@ VGAScreen.prototype.port3C9_write = function(color_byte)
         offset = this.dac_color_index_write % 3,
         color = this.vga256_palette[index];
 
-    color_byte = (color_byte & 0x3F) * 255 / 63 | 0;
+    if((this.dispi_enable_value & 0x20) === 0)
+    {
+        color_byte &= 0x3F;
+        const b = color_byte & 1;
+        color_byte = color_byte << 2 | b << 1 | b;
+    }
 
     if(offset === 0)
     {
@@ -1610,9 +1586,18 @@ VGAScreen.prototype.port3C9_read = function()
     var index = this.dac_color_index_read / 3 | 0;
     var offset = this.dac_color_index_read % 3;
     var color = this.vga256_palette[index];
+    var color8 = color >> (2 - offset) * 8 & 0xFF;
 
     this.dac_color_index_read++;
-    return (color >> (2 - offset) * 8 & 0xFF) / 255 * 63 | 0;
+
+    if(this.dispi_enable_value & 0x20)
+    {
+        return color8;
+    }
+    else
+    {
+        return color8 >> 2;
+    }
 };
 
 VGAScreen.prototype.port3CC_read = function()
@@ -2005,13 +1990,6 @@ VGAScreen.prototype.port3DA_read = function()
     return value;
 };
 
-VGAScreen.prototype.svga_bytes_per_line = function()
-{
-    var bits = this.svga_bpp === 15 ? 16 : this.svga_bpp;
-
-    return this.svga_width * bits / 8;
-};
-
 VGAScreen.prototype.port1CE_write = function(value)
 {
     this.dispi_index = value;
@@ -2023,6 +2001,16 @@ VGAScreen.prototype.port1CF_write = function(value)
 
     switch(this.dispi_index)
     {
+        case 0:
+            if(value >= 0xB0C0 && value <= 0xB0C5)
+            {
+                this.svga_version = value;
+            }
+            else
+            {
+                dbg_log("Invalid version value: " + h(value), LOG_VGA);
+            }
+            break;
         case 1:
             this.svga_width = value;
             if(this.svga_width > MAX_XRES)
@@ -2048,13 +2036,18 @@ VGAScreen.prototype.port1CF_write = function(value)
             this.dispi_enable_value = value;
             break;
         case 5:
+            dbg_log("SVGA bank offset: " + h(value << 16), LOG_VGA);
             this.svga_bank_offset = value << 16;
             break;
         case 9:
             // y offset
-            this.svga_offset = value * this.svga_bytes_per_line();
-            dbg_log("SVGA offset: " + h(this.svga_offset) + " y=" + h(value), LOG_VGA);
-            this.complete_redraw();
+            const offset = value * this.svga_width;
+            dbg_log("SVGA offset: " + h(offset) + " y=" + h(value), LOG_VGA);
+            if(this.svga_offset !== offset)
+            {
+                this.svga_offset = offset;
+                this.complete_redraw();
+            }
             break;
         default:
     }
@@ -2066,7 +2059,6 @@ VGAScreen.prototype.port1CF_write = function(value)
     }
 
     dbg_assert(this.svga_bpp !== 4, "unimplemented svga bpp: 4");
-    dbg_assert(this.svga_bpp !== 15, "unimplemented svga bpp: 15");
     dbg_assert(this.svga_bpp === 4 || this.svga_bpp === 8 ||
                this.svga_bpp === 15 || this.svga_bpp === 16 ||
                this.svga_bpp === 24 || this.svga_bpp === 32,
@@ -2101,8 +2093,7 @@ VGAScreen.prototype.svga_register_read = function(n)
     switch(n)
     {
         case 0:
-            // id
-            return 0xB0C0;
+            return this.svga_version;
         case 1:
             return this.dispi_enable_value & 2 ? MAX_XRES : this.svga_width;
         case 2:
@@ -2150,7 +2141,7 @@ VGAScreen.prototype.vga_replot = function()
     var addr_shift = this.vga_addr_shift_count();
     var addr_substitution = ~this.crtc_mode & 0x3;
 
-    var shift_mode = this.planar_mode & 0x60
+    var shift_mode = this.planar_mode & 0x60;
     var pel_width = this.attribute_mode & 0x40;
 
     for(var pixel_addr = start; pixel_addr <= end;)
@@ -2271,10 +2262,7 @@ VGAScreen.prototype.vga_redraw = function()
 {
     var start = this.diff_addr_min;
     var end = Math.min(this.diff_addr_max, VGA_PIXEL_BUFFER_SIZE - 1);
-    var buffer = this.dest_buffer;
-
-    // Closure compiler
-    if(!buffer) return;
+    const buffer = new Int32Array(this.cpu.wasm_memory.buffer, this.dest_buffet_offset, this.virtual_width * this.virtual_height);
 
     var mask = 0xFF;
     var colorset = 0x00;
@@ -2327,100 +2315,54 @@ VGAScreen.prototype.screen_fill_buffer = function()
         return;
     }
 
-    if(!this.dest_buffer)
+    if(this.image_data.data.byteLength === 0)
     {
-        dbg_log("Cannot fill buffer: No destination buffer", LOG_VGA);
-        // Update retrace behaviour anyway
-        this.update_vertical_retrace();
-        return;
-    }
-
-    if(this.diff_addr_max < this.diff_addr_min && this.diff_plot_max < this.diff_plot_min)
-    {
-        // No pixels to update
-        this.bus.send("screen-fill-buffer-end", this.layers);
-        this.update_vertical_retrace();
-        return;
+        // wasm memory resized
+        const buffer = new Uint8ClampedArray(this.cpu.wasm_memory.buffer, this.dest_buffet_offset, 4 * this.virtual_width * this.virtual_height);
+        this.image_data = new ImageData(buffer, this.virtual_width, this.virtual_height);
+        this.update_layers();
     }
 
     if(this.svga_enabled)
     {
-        var bpp = this.svga_bpp;
+        let min_y = 0;
+        let max_y = this.svga_height;
 
-        var buffer = this.dest_buffer;
-
-        var start = this.diff_addr_min;
-        var end = this.diff_addr_max;
-
-        switch(bpp)
+        if(this.svga_bpp === 8)
         {
-            case 32:
-                var start_pixel = start >> 2;
-                var end_pixel = (end >> 2) + 1;
+            // XXX: Slow, should be ported to rust, but it doesn't have access to vga256_palette
+            // XXX: Doesn't take svga_offset into account
+            const buffer = new Int32Array(this.cpu.wasm_memory.buffer, this.dest_buffet_offset, this.screen_width * this.screen_height);
+            const svga_memory = new Uint8Array(this.cpu.wasm_memory.buffer, this.svga_memory.byteOffset, this.vga_memory_size);
 
-                for(var i = start_pixel; i < end_pixel; i++)
-                {
-                    var dword = this.svga_memory32[i];
+            for(var i = 0; i < buffer.length; i++)
+            {
+                var color = this.vga256_palette[svga_memory[i]];
+                buffer[i] = color & 0xFF00 | color << 16 | color >> 16 | 0xFF000000;
+            }
+        }
+        else
+        {
+            this.cpu.svga_fill_pixel_buffer(this.svga_bpp, this.svga_offset);
 
-                    buffer[i] = dword << 16 | dword >> 16 & 0xFF | dword & 0xFF00 | 0xFF000000;
-                }
-                break;
-
-            case 24:
-                var start_pixel = start / 3 | 0;
-                var end_pixel = (end / 3 | 0) + 1;
-                var addr = start_pixel * 3;
-
-                for(var i = start_pixel; addr < end; i++)
-                {
-                    var red = this.svga_memory[addr++];
-                    var green = this.svga_memory[addr++];
-                    var blue = this.svga_memory[addr++];
-
-                    buffer[i] = red << 16 | green << 8 | blue | 0xFF000000;
-                }
-                break;
-
-            case 16:
-                var start_pixel = start >> 1;
-                var end_pixel = (end >> 1) + 1;
-
-                for(var i = start_pixel; i < end_pixel; i++)
-                {
-                    var word = this.svga_memory16[i];
-
-                    var blue = (word >> 11) * 0xFF / 0x1F | 0;
-                    var green = (word >> 5 & 0x3F) * 0xFF / 0x3F | 0;
-                    var red = (word & 0x1F) * 0xFF / 0x1F | 0;
-
-                    buffer[i] = red << 16 | green << 8 | blue | 0xFF000000;
-                }
-                break;
-
-            case 8:
-                var start_pixel = start;
-                var end_pixel = end + 1;
-
-                for(var i = start; i <= end; i++)
-                {
-                    var color = this.vga256_palette[this.svga_memory[i]];
-                    buffer[i] = color & 0xFF00 | color << 16 | color >> 16 | 0xFF000000;
-                }
-                break;
-
-            default:
-                dbg_assert(false, "Unsupported BPP: " + bpp);
+            const bytes_per_pixel = this.svga_bpp === 15 ? 2 : this.svga_bpp / 8;
+            min_y = (((this.cpu.svga_dirty_bitmap_min_offset[0] / bytes_per_pixel | 0) - this.svga_offset) / this.svga_width | 0);
+            max_y = (((this.cpu.svga_dirty_bitmap_max_offset[0] / bytes_per_pixel | 0) - this.svga_offset) / this.svga_width | 0) + 1;
         }
 
-        var min_y = start_pixel / this.svga_width | 0;
-        var max_y = end_pixel / this.svga_width | 0;
+        if(min_y < max_y)
+        {
+            min_y = Math.max(min_y, 0);
+            max_y = Math.min(max_y, this.svga_height);
 
-        this.bus.send("screen-fill-buffer-end", [{
-            screen_x: 0, screen_y: min_y,
-            buffer_x: 0, buffer_y: min_y,
-            buffer_width: this.svga_width,
-            buffer_height: max_y - min_y + 1,
-        }]);
+            this.bus.send("screen-fill-buffer-end", [{
+                image_data: this.image_data,
+                screen_x: 0, screen_y: min_y,
+                buffer_x: 0, buffer_y: min_y,
+                buffer_width: this.svga_width,
+                buffer_height: max_y - min_y,
+            }]);
+        }
     }
     else
     {

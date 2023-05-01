@@ -25,8 +25,6 @@ function FloppyController(cpu, fda_image, fdb_image)
     this.response_index = 0;
     this.response_length = 0;
 
-    this.floppy_size = 0;
-
     /* const */
     this.fda_image = fda_image;
 
@@ -54,44 +52,46 @@ function FloppyController(cpu, fda_image, fdb_image)
         this.sectors_per_track = 0;
         this.number_of_heads = 0;
         this.number_of_cylinders = 0;
-
-        this.floppy_size = 0;
     }
     else
     {
-        this.floppy_size = fda_image.byteLength;
-
         var floppy_types = {
-            160  : { type: 1, tracks: 40, sectors: 8 , heads: 1 },
-            180  : { type: 1, tracks: 40, sectors: 9 , heads: 1 },
-            200  : { type: 1, tracks: 40, sectors: 10, heads: 1 },
-            320  : { type: 1, tracks: 40, sectors: 8 , heads: 2 },
-            360  : { type: 1, tracks: 40, sectors: 9 , heads: 2 },
-            400  : { type: 1, tracks: 40, sectors: 10, heads: 2 },
-            720  : { type: 3, tracks: 80, sectors: 9 , heads: 2 },
-            1200 : { type: 2, tracks: 80, sectors: 15, heads: 2 },
-            1440 : { type: 4, tracks: 80, sectors: 18, heads: 2 },
-            1722 : { type: 5, tracks: 82, sectors: 21, heads: 2 },
-            2880 : { type: 5, tracks: 80, sectors: 36, heads: 2 },
+            [ 160 * 1024] : { type: 1, tracks: 40, sectors: 8 , heads: 1 },
+            [ 180 * 1024] : { type: 1, tracks: 40, sectors: 9 , heads: 1 },
+            [ 200 * 1024] : { type: 1, tracks: 40, sectors: 10, heads: 1 },
+            [ 320 * 1024] : { type: 1, tracks: 40, sectors: 8 , heads: 2 },
+            [ 360 * 1024] : { type: 1, tracks: 40, sectors: 9 , heads: 2 },
+            [ 400 * 1024] : { type: 1, tracks: 40, sectors: 10, heads: 2 },
+            [ 720 * 1024] : { type: 3, tracks: 80, sectors: 9 , heads: 2 },
+            [1200 * 1024] : { type: 2, tracks: 80, sectors: 15, heads: 2 },
+            [1440 * 1024] : { type: 4, tracks: 80, sectors: 18, heads: 2 },
+            [1722 * 1024] : { type: 5, tracks: 82, sectors: 21, heads: 2 },
+            [2880 * 1024] : { type: 5, tracks: 80, sectors: 36, heads: 2 },
+
+            // not a real floppy type, used to support sectorlisp and friends
+            512: { type: 1, tracks: 1, sectors: 1, heads: 1 },
         };
+
+        let floppy_size = fda_image.byteLength;
 
         var number_of_cylinders,
             sectors_per_track,
             number_of_heads,
-            floppy_type = floppy_types[this.floppy_size >> 10];
+            floppy_type = floppy_types[floppy_size];
 
-        if(floppy_type && (this.floppy_size & 0x3FF) === 0)
+        if(!floppy_type)
         {
-            cpu.devices.rtc.cmos_write(CMOS_FLOPPY_DRIVE_TYPE, floppy_type.type << 4);
+            floppy_size = fda_image.byteLength > 1440 * 1024 ? 2880 * 1024 : 1440 * 1024;
+            floppy_type = floppy_types[floppy_size];
 
-            sectors_per_track = floppy_type.sectors;
-            number_of_heads = floppy_type.heads;
-            number_of_cylinders = floppy_type.tracks;
+            dbg_log("Warning: Unkown floppy size: " + fda_image.byteLength + ", assuming " + floppy_size);
         }
-        else
-        {
-            throw "Unknown floppy size: " + h(fda_image.byteLength);
-        }
+
+        cpu.devices.rtc.cmos_write(CMOS_FLOPPY_DRIVE_TYPE, floppy_type.type << 4);
+
+        sectors_per_track = floppy_type.sectors;
+        number_of_heads = floppy_type.heads;
+        number_of_cylinders = floppy_type.tracks;
 
         this.sectors_per_track = sectors_per_track;
         this.number_of_heads = number_of_heads;
@@ -119,7 +119,7 @@ FloppyController.prototype.get_state = function()
     state[4] = this.response_data;
     state[5] = this.response_index;
     state[6] = this.response_length;
-    state[7] = this.floppy_size;
+
     state[8] = this.status_reg0;
     state[9] = this.status_reg1;
     state[10] = this.status_reg2;
@@ -144,7 +144,7 @@ FloppyController.prototype.set_state = function(state)
     this.response_data = state[4];
     this.response_index = state[5];
     this.response_length = state[6];
-    this.floppy_size = state[7];
+
     this.status_reg0 = state[8];
     this.status_reg1 = state[9];
     this.status_reg2 = state[10];
@@ -189,7 +189,7 @@ FloppyController.prototype.port3F7_read = function()
 {
     dbg_log("3F7 read", LOG_FLOPPY);
     return 0x00;
-}
+};
 
 FloppyController.prototype.port3F5_read = function()
 {
@@ -249,6 +249,7 @@ FloppyController.prototype.port3F5_write = function(reg_byte)
                 this.bytes_expecting = 1;
                 break;
             case 0x05:
+            case 0x45:
             case 0xC5:
                 this.next_command = function(args) { this.do_sector(true, args); };
                 this.bytes_expecting = 8;
@@ -294,7 +295,7 @@ FloppyController.prototype.port3F2_read = function()
 {
     dbg_log("read 3F2: DOR", LOG_FLOPPY);
     return this.dor;
-}
+};
 
 FloppyController.prototype.port3F2_write = function(value)
 {
@@ -311,7 +312,7 @@ FloppyController.prototype.port3F2_write = function(value)
     dbg_log("DOR = " + h(value), LOG_FLOPPY);
 
     this.dor = value;
-}
+};
 
 FloppyController.prototype.check_drive_status = function(args)
 {
@@ -320,7 +321,7 @@ FloppyController.prototype.check_drive_status = function(args)
     this.response_index = 0;
     this.response_length = 1;
     this.response_data[0] = 1 << 5;
-}
+};
 
 FloppyController.prototype.seek = function(args)
 {
@@ -331,14 +332,14 @@ FloppyController.prototype.seek = function(args)
     this.last_head = args[0] >> 2 & 1;
 
     this.raise_irq();
-}
+};
 
 FloppyController.prototype.calibrate = function(args)
 {
     dbg_log("floppy calibrate", LOG_FLOPPY);
 
     this.raise_irq();
-}
+};
 
 FloppyController.prototype.check_interrupt_status = function()
 {
@@ -350,7 +351,7 @@ FloppyController.prototype.check_interrupt_status = function()
 
     this.response_data[0] = 1 << 5;
     this.response_data[1] = this.last_cylinder;
-}
+};
 
 FloppyController.prototype.do_sector = function(is_write, args)
 {
@@ -424,12 +425,12 @@ FloppyController.prototype.done = function(args, cylinder, head, sector, error)
     this.response_data[6] = args[4];
 
     this.raise_irq();
-}
+};
 
 FloppyController.prototype.fix_drive_data = function(args)
 {
     dbg_log("floppy fix drive data " + args, LOG_FLOPPY);
-}
+};
 
 FloppyController.prototype.read_sector_id = function(args)
 {
@@ -447,7 +448,7 @@ FloppyController.prototype.read_sector_id = function(args)
     this.response_data[6] = 0;
 
     this.raise_irq();
-}
+};
 
 FloppyController.prototype.raise_irq = function()
 {

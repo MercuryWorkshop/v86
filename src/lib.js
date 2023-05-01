@@ -1,31 +1,60 @@
 "use strict";
 
+var goog = goog || {};
+goog.exportSymbol = function() {};
+goog.exportProperty = function() {};
+
 var v86util = v86util || {};
 
 // pad string with spaces on the right
 v86util.pads = function(str, len)
 {
-    str = str ? str + "" : "";
-
-    while(str.length < len)
-    {
-        str = str + " ";
-    }
-
-    return str;
+    str = (str || str === 0) ? str + "" : "";
+    return str.padEnd(len, " ");
 };
 
 // pad string with zeros on the left
 v86util.pad0 = function(str, len)
 {
-    str = str ? str + "" : "";
+    str = (str || str === 0) ? str + "" : "";
+    return str.padStart(len, "0");
+};
 
-    while(str.length < len)
-    {
-        str = "0" + str;
-    }
+// generates array given size with zeros
+v86util.zeros = function(size)
+{
+    return Array(size).fill(0);
+};
 
-    return str;
+// generates [0, 1, 2, ..., size-1]
+v86util.range = function(size)
+{
+    return Array.from(Array(size).keys());
+};
+
+v86util.view = function(constructor, memory, offset, length)
+{
+    return new Proxy({},
+        {
+            get: function(target, property, receiver)
+            {
+                const b = new constructor(memory.buffer, offset, length);
+                const x = b[property];
+                if(typeof x === "function")
+                {
+                    return x.bind(b);
+                }
+                dbg_assert(/^\d+$/.test(property) || property === "buffer" || property === "length" ||
+                    property === "BYTES_PER_ELEMENT" || property === "byteOffset");
+                return x;
+            },
+            set: function(target, property, value, receiver)
+            {
+                dbg_assert(/^\d+$/.test(property));
+                new constructor(memory.buffer, offset, length)[property] = value;
+                return true;
+            },
+        });
 };
 
 /**
@@ -48,89 +77,116 @@ function h(n, len)
     return "0x" + v86util.pad0(str.toUpperCase(), len || 1);
 }
 
+function hex_dump(buffer)
+{
+    function hex(n, len)
+    {
+        return v86util.pad0(n.toString(16).toUpperCase(), len);
+    }
 
-if(typeof window !== "undefined" && window.crypto && window.crypto.getRandomValues)
+    const result = [];
+    let offset = 0;
+
+    for(; offset + 15 < buffer.length; offset += 16)
+    {
+        let line = hex(offset, 5) + "   ";
+
+        for(let j = 0; j < 0x10; j++)
+        {
+            line += hex(buffer[offset + j], 2) + " ";
+        }
+
+        line += "  ";
+
+        for(let j = 0; j < 0x10; j++)
+        {
+            const x = buffer[offset + j];
+            line += (x >= 33 && x !== 34 && x !== 92 && x <= 126) ? String.fromCharCode(x) : ".";
+        }
+
+        result.push(line);
+    }
+
+    let line = hex(offset, 5) + "   ";
+
+    for(; offset < buffer.length; offset++)
+    {
+        line += hex(buffer[offset], 2) + " ";
+    }
+
+    const remainder = offset & 0xF;
+    line += "   ".repeat(0x10 - remainder);
+    line += "  ";
+
+    for(let j = 0; j < remainder; j++)
+    {
+        const x = buffer[offset + j];
+        line += (x >= 33 && x !== 34 && x !== 92 && x <= 126) ? String.fromCharCode(x) : ".";
+    }
+
+    result.push(line);
+
+    return "\n" + result.join("\n") + "\n";
+}
+
+if(typeof crypto !== "undefined" && crypto.getRandomValues)
 {
     let rand_data = new Int32Array(1);
 
-    v86util.has_rand_int = function()
+    v86util.get_rand_int = function()
     {
-        return true;
+        crypto.getRandomValues(rand_data);
+        return rand_data[0];
     };
+}
+else if(typeof require !== "undefined")
+{
+    /** @type {{ randomBytes: Function }} */
+    const crypto = require("crypto");
 
     v86util.get_rand_int = function()
     {
-        window.crypto.getRandomValues(rand_data);
-        return rand_data[0];
+        return crypto.randomBytes(4)["readInt32LE"](0);
     };
 }
 else
 {
-    v86util.has_rand_int = function()
-    {
-        return false;
-    };
-
-    v86util.get_rand_int = function()
-    {
-        console.assert(false);
-    };
+    dbg_assert(false, "Unsupported platform: No cryptographic random values");
 }
-
-
-/**
- * Synchronous access to ArrayBuffer
- * @constructor
- */
-function SyncBuffer(buffer)
-{
-    this.buffer = buffer;
-    this.byteLength = buffer.byteLength;
-    this.onload = undefined;
-    this.onprogress = undefined;
-}
-
-SyncBuffer.prototype.load = function()
-{
-    this.onload && this.onload({ buffer: this.buffer });
-};
-
-/**
- * @param {number} start
- * @param {number} len
- * @param {function(!Uint8Array)} fn
- */
-SyncBuffer.prototype.get = function(start, len, fn)
-{
-    dbg_assert(start + len <= this.byteLength);
-    fn(new Uint8Array(this.buffer, start, len));
-};
-
-/**
- * @param {number} start
- * @param {!Uint8Array} slice
- * @param {function()} fn
- */
-SyncBuffer.prototype.set = function(start, slice, fn)
-{
-    dbg_assert(start + slice.byteLength <= this.byteLength);
-
-    new Uint8Array(this.buffer, start, slice.byteLength).set(slice);
-    fn();
-};
-
-/**
- * @param {function(!ArrayBuffer)} fn
- */
-SyncBuffer.prototype.get_buffer = function(fn)
-{
-    fn(this.buffer);
-};
-
-
 
 (function()
 {
+    if(typeof Math.clz32 === "function" && Math.clz32(0) === 32 &&
+       Math.clz32(0x12345) === 15 && Math.clz32(-1) === 0)
+    {
+        /**
+         * calculate the integer logarithm base 2 of a byte
+         * @param {number} x
+         * @return {number}
+         */
+        v86util.int_log2_byte = function(x)
+        {
+            dbg_assert(x > 0);
+            dbg_assert(x < 0x100);
+
+            return 31 - Math.clz32(x);
+        };
+
+        /**
+         * calculate the integer logarithm base 2
+         * @param {number} x
+         * @return {number}
+         */
+        v86util.int_log2 = function(x)
+        {
+            dbg_assert(x > 0);
+
+            return 31 - Math.clz32(x);
+        };
+
+        return;
+    }
+
     var int_log2_table = new Int8Array(256);
 
     for(var i = 0, b = -2; i < 256; i++)
@@ -161,6 +217,7 @@ SyncBuffer.prototype.get_buffer = function(fn)
      */
     v86util.int_log2 = function(x)
     {
+        x >>>= 0;
         dbg_assert(x > 0);
 
         // http://jsperf.com/integer-log2/6
@@ -431,3 +488,216 @@ function download(file_or_blob, name)
 
     window.URL.revokeObjectURL(a.href);
 }
+
+/**
+ * A simple 1d bitmap
+ * @constructor
+ */
+v86util.Bitmap = function(length_or_buffer)
+{
+    if(typeof length_or_buffer === "number")
+    {
+        this.view = new Uint8Array(length_or_buffer + 7 >> 3);
+    }
+    else if(length_or_buffer instanceof ArrayBuffer)
+    {
+        this.view = new Uint8Array(length_or_buffer);
+    }
+    else
+    {
+        dbg_assert(false, "v86util.Bitmap: Invalid argument");
+    }
+};
+
+v86util.Bitmap.prototype.set = function(index, value)
+{
+    const bit_index = index & 7;
+    const byte_index = index >> 3;
+    const bit_mask = 1 << bit_index;
+
+    this.view[byte_index] =
+        value ? this.view[byte_index] | bit_mask : this.view[byte_index] & ~bit_mask;
+};
+
+v86util.Bitmap.prototype.get = function(index)
+{
+    const bit_index = index & 7;
+    const byte_index = index >> 3;
+
+    return this.view[byte_index] >> bit_index & 1;
+};
+
+v86util.Bitmap.prototype.get_buffer = function()
+{
+    return this.view.buffer;
+};
+
+
+if(typeof XMLHttpRequest === "undefined")
+{
+    v86util.load_file = load_file_nodejs;
+}
+else
+{
+    v86util.load_file = load_file;
+}
+
+/**
+ * @param {string} filename
+ * @param {Object} options
+ * @param {number=} n_tries
+ */
+function load_file(filename, options, n_tries)
+{
+    var http = new XMLHttpRequest();
+
+    http.open(options.method || "get", filename, true);
+
+    if(options.as_json)
+    {
+        http.responseType = "json";
+    }
+    else
+    {
+        http.responseType = "arraybuffer";
+    }
+
+    if(options.headers)
+    {
+        var header_names = Object.keys(options.headers);
+
+        for(var i = 0; i < header_names.length; i++)
+        {
+            var name = header_names[i];
+            http.setRequestHeader(name, options.headers[name]);
+        }
+    }
+
+    if(options.range)
+    {
+        let start = options.range.start;
+        let end = start + options.range.length - 1;
+        http.setRequestHeader("Range", "bytes=" + start + "-" + end);
+
+        // Abort if server responds with complete file in response to range
+        // request, to prevent downloading large files from broken http servers
+        http.onreadystatechange = function()
+        {
+            if(http.status === 200)
+            {
+                http.abort();
+            }
+        };
+    }
+
+    http.onload = function(e)
+    {
+        if(http.readyState === 4)
+        {
+            if(http.status !== 200 && http.status !== 206)
+            {
+                console.error("Loading the image " + filename + " failed (status %d)", http.status);
+                if(http.status >= 500 && http.status < 600)
+                {
+                    retry();
+                }
+            }
+            else if(http.response)
+            {
+                options.done && options.done(http.response, http);
+            }
+        }
+    };
+
+    http.onerror = function(e)
+    {
+        console.error("Loading the image " + filename + " failed", e);
+        retry();
+    };
+
+    if(options.progress)
+    {
+        http.onprogress = function(e)
+        {
+            options.progress(e);
+        };
+    }
+
+    http.send(null);
+
+    function retry()
+    {
+        const number_of_tries = n_tries || 0;
+        const timeout = [1, 1, 2, 3, 5, 8, 13, 21][number_of_tries] || 34;
+        setTimeout(() => {
+            load_file(filename, options, number_of_tries + 1);
+        }, 1000 * timeout);
+    }
+}
+
+function load_file_nodejs(filename, options)
+{
+    let fs = require("fs");
+
+    if(options.range)
+    {
+        dbg_assert(!options.as_json);
+
+        fs["open"](filename, "r", (err, fd) =>
+            {
+                if(err) throw err;
+
+                let length = options.range.length;
+                var buffer = Buffer.allocUnsafe(length);
+
+                fs["read"](fd, buffer, 0, length, options.range.start, (err, bytes_read) =>
+                    {
+                        if(err) throw err;
+
+                        dbg_assert(bytes_read === length);
+                        options.done && options.done(new Uint8Array(buffer));
+
+                        fs["close"](fd, (err) => {
+                            if(err) throw err;
+                        });
+                    });
+            });
+    }
+    else
+    {
+        var o = {
+            encoding: options.as_json ? "utf-8" : null,
+        };
+
+        fs["readFile"](filename, o, function(err, data)
+            {
+                if(err)
+                {
+                    console.log("Could not read file:", filename, err);
+                }
+                else
+                {
+                    var result = data;
+
+                    if(options.as_json)
+                    {
+                        result = JSON.parse(result);
+                    }
+                    else
+                    {
+                        result = new Uint8Array(result).buffer;
+                    }
+
+                    options.done(result);
+                }
+            });
+    }
+}
+
+// Reads len characters at offset from Memory object mem as a JS string
+v86util.read_sized_string_from_mem = function read_sized_string_from_mem(mem, offset, len)
+{
+    offset >>>= 0;
+    len >>>= 0;
+    return String.fromCharCode(...new Uint8Array(mem.buffer, offset, len));
+};

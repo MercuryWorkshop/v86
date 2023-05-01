@@ -62,7 +62,10 @@ function PIT(cpu, bus)
 
     cpu.io.register_write(0x40, this, function(data) { this.counter_write(0, data); });
     cpu.io.register_write(0x41, this, function(data) { this.counter_write(1, data); });
-    cpu.io.register_write(0x42, this, function(data) { this.counter_write(2, data); });
+    cpu.io.register_write(0x42, this, function(data) {
+        this.counter_write(2, data);
+        this.bus.send("pcspeaker-update", [this.counter_mode[2], this.counter_reload[2]]);
+    });
 
     cpu.io.register_write(0x43, this, this.port43_write);
 }
@@ -106,12 +109,15 @@ PIT.prototype.timer = function(now, no_irq)
     {
         if(this.counter_enabled[0] && this.did_rollover(0, now))
         {
-            time_to_next_interrupt = 0;
-
             this.counter_start_value[0] = this.get_counter_value(0, now);
             this.counter_start_time[0] = now;
 
             dbg_log("pit interrupt. new value: " + this.counter_start_value[0], LOG_PIT);
+
+            // This isn't strictly correct, but it's necessary since browsers
+            // may sleep longer than necessary to trigger the else branch below
+            // and clear the irq
+            this.cpu.device_lower_irq(0);
 
             this.cpu.device_raise_irq(0);
             var mode = this.counter_mode[0];
@@ -125,8 +131,15 @@ PIT.prototype.timer = function(now, no_irq)
         {
             this.cpu.device_lower_irq(0);
         }
+
+        if(this.counter_enabled[0])
+        {
+            const diff = now - this.counter_start_time[0];
+            const diff_in_ticks = Math.floor(diff * OSCILLATOR_FREQ);
+            const ticks_missing = this.counter_start_value[0] - diff_in_ticks; // XXX: to simplify
+            time_to_next_interrupt = ticks_missing / OSCILLATOR_FREQ;
+        }
     }
-    time_to_next_interrupt = 0;
 
     return time_to_next_interrupt;
 };
@@ -167,7 +180,7 @@ PIT.prototype.did_rollover = function(i, now)
     if(diff < 0)
     {
         // should only happen after restore_state
-        dbg_log("Warning: PIT timer difference is negative, resetting");
+        dbg_log("Warning: PIT timer difference is negative, resetting (timer " + i + ")");
         return true;
     }
     var diff_in_ticks = Math.floor(diff * OSCILLATOR_FREQ);
@@ -249,8 +262,6 @@ PIT.prototype.counter_write = function(i, value)
     {
         this.counter_next_low[i] ^= 1;
     }
-
-    this.bus.send("pcspeaker-update", [this.counter_mode[2], this.counter_reload[2]]);
 };
 
 PIT.prototype.port43_write = function(reg_byte)
@@ -277,7 +288,7 @@ PIT.prototype.port43_write = function(reg_byte)
         this.counter_latch[i] = 2;
         var value = this.get_counter_value(i, v86.microtick());
         dbg_log("latch: " + value, LOG_PIT);
-        this.counter_latch_value[i] = value ? value - 1 : 0
+        this.counter_latch_value[i] = value ? value - 1 : 0;
 
         return;
     }
@@ -327,5 +338,15 @@ PIT.prototype.port43_write = function(reg_byte)
     this.counter_mode[i] = mode;
     this.counter_read_mode[i] = read_mode;
 
-    this.bus.send("pcspeaker-update", [this.counter_mode[2], this.counter_reload[2]]);
+    if(i === 2)
+    {
+        this.bus.send("pcspeaker-update", [this.counter_mode[2], this.counter_reload[2]]);
+    }
+};
+
+PIT.prototype.dump = function()
+{
+    const reload = this.counter_reload[0];
+    const time = (reload || 0x10000) / OSCILLATOR_FREQ;
+    dbg_log("counter0 ticks every " + time + "ms (reload=" + reload + ")");
 };

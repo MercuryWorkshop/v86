@@ -15,7 +15,8 @@ window.onload = function()
     }, 999);
 
     var emulator = new V86Starter({
-        memory_size: 128 * 1024 * 1024,
+        wasm_path: "../build/v86.wasm",
+        memory_size: 512 * 1024 * 1024,
         vga_memory_size: 8 * 1024 * 1024,
         screen_container: document.getElementById("screen_container"),
         bios: {
@@ -24,24 +25,18 @@ window.onload = function()
         vga_bios: {
             url: "../bios/vgabios.bin",
         },
-        hda: {
-            url: "http://localhost/v86-images/arch3.img",
-            size: 8 * 1024 * 1024 * 1024,
-            async: true,
-        },
         initial_state: {
-            url: "http://localhost/v86-images/v86state.bin",
+            url: "../images/arch_state.bin.zst",
         },
         filesystem: {
-            baseurl: "http://localhost/v86-images/arch/",
-            basefs: "http://localhost/v86-images/fs.json",
+            baseurl: "../images/arch/",
         },
         autostart: true,
     });
 
     document.getElementById("status").textContent += ".";
 
-    emulator.add_listener("emulator-ready", function()
+    emulator.add_listener("emulator-ready", async function()
     {
         document.getElementById("status").textContent += ".";
 
@@ -50,28 +45,20 @@ window.onload = function()
 
         buffer.set(code.split("").map(function(chr) { return chr.charCodeAt(0); }));
 
-        emulator.create_file("/root/code.js", buffer, function(error)
-        {
-            if(error) throw error;
-
-            emulator.serial0_send("node /root/code.js > /root/out.txt 2> /root/out.txt\n");
-        });
+        await emulator.create_file("/root/code.js", buffer);
+        emulator.serial0_send("node /root/code.js > /root/out.txt 2> /root/out.txt\n");
     });
 
     var serial_out = "";
-    emulator.add_listener("serial0-output-char", function(chr)
+    emulator.add_listener("serial0-output-char", async function(chr)
     {
         serial_out += chr;
         //document.getElementById("output").textContent += chr;
 
         if(serial_out.endsWith("root@nyu"))
         {
-            emulator.read_file("/root/out.txt", function(error, data)
-            {
-                if(error) throw error;
-
-                document.getElementById("output").textContent += String.fromCharCode.apply(this, data);
-            });
+            const data = await emulator.read_file("/root/out.txt");
+            document.getElementById("output").textContent += String.fromCharCode.apply(this, data);
         }
     });
 }

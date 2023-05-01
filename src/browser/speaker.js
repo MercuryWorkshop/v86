@@ -16,7 +16,7 @@ function SpeakerAdapter(bus)
     {
         return;
     }
-    if(!window.AudioContext && !window.webkitAudioContext)
+    if(!window.AudioContext && !window["webkitAudioContext"])
     {
         console.warn("Web browser doesn't support Web Audio API");
         return;
@@ -28,7 +28,7 @@ function SpeakerAdapter(bus)
     this.bus = bus;
 
     /** @const */
-    this.audio_context = new (window.AudioContext || window.webkitAudioContext)();
+    this.audio_context = window.AudioContext ? new AudioContext() : new webkitAudioContext();
 
     /** @const */
     this.mixer = new SpeakerMixer(bus, this.audio_context);
@@ -57,6 +57,12 @@ function SpeakerAdapter(bus)
     }, this);
     bus.send("speaker-has-initialized");
 }
+
+SpeakerAdapter.prototype.destroy = function()
+{
+    this.audio_context && this.audio_context.close();
+    this.dac && this.dac.node_processor && this.dac.node_processor.port.close();
+};
 
 /**
  * @constructor
@@ -765,9 +771,11 @@ function SpeakerWorkletDAC(bus, audio_context, mixer)
 
         this.node_processor = new AudioWorkletNode(this.audio_context, "dac-processor",
         {
-            "numberOfInputs": 0,
-            "numberOfOutputs": 1,
-            "outputChannelCount": [2],
+            numberOfInputs: 0,
+            numberOfOutputs: 1,
+            outputChannelCount: [2],
+            parameterData: {},
+            processorOptions: {},
         });
 
         this.node_processor.port.postMessage(
@@ -962,8 +970,17 @@ SpeakerBufferSourceDAC.prototype.queue = function(data)
         // Allocating new AudioBuffer every block
         // - Memory profiles show insignificant improvements if recycling old buffers.
         buffer = this.audio_context.createBuffer(2, sample_count, this.sampling_rate);
-        buffer.copyToChannel(data[0], 0);
-        buffer.copyToChannel(data[1], 1);
+        if(buffer.copyToChannel)
+        {
+            buffer.copyToChannel(data[0], 0);
+            buffer.copyToChannel(data[1], 1);
+        }
+        else
+        {
+            // Safari doesn't support copyToChannel yet. See #286
+            buffer.getChannelData(0).set(data[0]);
+            buffer.getChannelData(1).set(data[1]);
+        }
     }
 
     var source = this.audio_context.createBufferSource();

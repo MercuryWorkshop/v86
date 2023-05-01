@@ -32,16 +32,30 @@ function MouseAdapter(bus, screen_container)
         this.enabled = enabled;
     }, this);
 
+    // TODO: Should probably not use bus for this
+    this.is_running = false;
+    this.bus.register("emulator-stopped", function()
+    {
+        this.is_running = false;
+    }, this);
+    this.bus.register("emulator-started", function()
+    {
+        this.is_running = true;
+    }, this);
+
     this.destroy = function()
     {
+        if(typeof window === "undefined")
+        {
+            return;
+        }
         window.removeEventListener("touchstart", touch_start_handler, false);
         window.removeEventListener("touchend", touch_end_handler, false);
         window.removeEventListener("touchmove", mousemove_handler, false);
         window.removeEventListener("mousemove", mousemove_handler, false);
         window.removeEventListener("mousedown", mousedown_handler, false);
         window.removeEventListener("mouseup", mouseup_handler, false);
-        window.removeEventListener("DOMMouseScroll", mousewheel_handler, false);
-        window.removeEventListener("mousewheel", mousewheel_handler, false);
+        window.removeEventListener("wheel", mousewheel_handler, { passive: false });
     };
 
     this.init = function()
@@ -58,8 +72,7 @@ function MouseAdapter(bus, screen_container)
         window.addEventListener("mousemove", mousemove_handler, false);
         window.addEventListener("mousedown", mousedown_handler, false);
         window.addEventListener("mouseup", mouseup_handler, false);
-        window.addEventListener("DOMMouseScroll", mousewheel_handler, false);
-        window.addEventListener("mousewheel", mousewheel_handler, false);
+        window.addEventListener("wheel", mousewheel_handler, { passive: false });
     };
     this.init();
 
@@ -84,18 +97,27 @@ function MouseAdapter(bus, screen_container)
             return false;
         }
 
-        if(e.type === "mousemove" || e.type === "touchmove")
-        {
-            return true;
-        }
+        const MOVE_MOUSE_WHEN_OVER_SCREEN_ONLY = true;
 
-        if(e.type === "mousewheel" || e.type === "DOMMouseScroll")
+        if(MOVE_MOUSE_WHEN_OVER_SCREEN_ONLY)
         {
             var parent = screen_container || document.body;
-            return is_child(e.target, parent);
+            return document.pointerLockElement || is_child(e.target, parent);
         }
+        else
+        {
+            if(e.type === "mousemove" || e.type === "touchmove")
+            {
+                return true;
+            }
 
-        return !e.target || e.target.nodeName !== "INPUT" && e.target.nodeName !== "TEXTAREA";
+            if(e.type === "mousewheel" || e.type === "DOMMouseScroll")
+            {
+                return is_child(e.target, parent);
+            }
+
+            return !e.target || e.target.nodeName !== "INPUT" && e.target.nodeName !== "TEXTAREA";
+        }
     }
 
     function touch_start_handler(e)
@@ -130,6 +152,11 @@ function MouseAdapter(bus, screen_container)
         }
 
         if(!may_handle(e))
+        {
+            return;
+        }
+
+        if(!mouse.is_running)
         {
             return;
         }
@@ -181,11 +208,8 @@ function MouseAdapter(bus, screen_container)
             }
         }
 
-        if(SPEED_FACTOR !== 1)
-        {
-            delta_x = delta_x * SPEED_FACTOR;
-            delta_y = delta_y * SPEED_FACTOR;
-        }
+        delta_x *= SPEED_FACTOR;
+        delta_y *= SPEED_FACTOR;
 
         //if(Math.abs(delta_x) > 100 || Math.abs(delta_y) > 100)
         //{
@@ -196,10 +220,13 @@ function MouseAdapter(bus, screen_container)
 
         mouse.bus.send("mouse-delta", [delta_x, delta_y]);
 
-        let absolute_x = e.pageX - screen_container.offsetLeft;
-        let absolute_y = e.pageY - screen_container.offsetTop;
-        mouse.bus.send("mouse-absolute", [
-            absolute_x, absolute_y, screen_container.offsetWidth, screen_container.offsetHeight]);
+        if(screen_container)
+        {
+            let absolute_x = e.pageX - screen_container.offsetLeft;
+            let absolute_y = e.pageY - screen_container.offsetTop;
+            mouse.bus.send("mouse-absolute", [
+                absolute_x, absolute_y, screen_container.offsetWidth, screen_container.offsetHeight]);
+        }
     }
 
     function mousedown_handler(e)
@@ -239,9 +266,10 @@ function MouseAdapter(bus, screen_container)
         }
         else
         {
-            console.log("Unknown event.which: " + e.which);
+            dbg_log("Unknown event.which: " + e.which);
         }
         mouse.bus.send("mouse-click", [left_down, middle_down, right_down]);
+        e.preventDefault();
     }
 
     function mousewheel_handler(e)
