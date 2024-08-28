@@ -40,7 +40,7 @@ function MouseAdapter(bus, screen_container) {
     }, this);
 
     this.destroy = function() {
-        if (typeof window === "undefined") {
+        if(typeof window === "undefined") {
             return;
         }
         window.removeEventListener("touchstart", touch_start_handler, false);
@@ -53,7 +53,7 @@ function MouseAdapter(bus, screen_container) {
     };
 
     this.init = function() {
-        if (typeof window === "undefined") {
+        if(typeof window === "undefined") {
             return;
         }
         this.destroy();
@@ -69,8 +69,8 @@ function MouseAdapter(bus, screen_container) {
     this.init();
 
     function is_child(child, parent) {
-        while (child.parentNode) {
-            if (child === parent) {
+        while(child.parentNode) {
+            if(child === parent) {
                 return true;
             }
             child = child.parentNode;
@@ -80,22 +80,22 @@ function MouseAdapter(bus, screen_container) {
     }
 
     function may_handle(e) {
-        if (!mouse.enabled || !mouse.emu_enabled) {
+        if(!mouse.enabled || !mouse.emu_enabled) {
             return false;
         }
 
         const MOVE_MOUSE_WHEN_OVER_SCREEN_ONLY = true;
 
-        if (MOVE_MOUSE_WHEN_OVER_SCREEN_ONLY) {
+        if(MOVE_MOUSE_WHEN_OVER_SCREEN_ONLY) {
             var parent = screen_container || document.body;
             return document.pointerLockElement || is_child(e.target, parent);
         }
         else {
-            if (e.type === "mousemove" || e.type === "touchmove") {
+            if(e.type === "mousemove" || e.type === "touchmove") {
                 return true;
             }
 
-            if (e.type === "mousewheel" || e.type === "DOMMouseScroll") {
+            if(e.type === "mousewheel" || e.type === "DOMMouseScroll") {
                 return is_child(e.target, parent);
             }
 
@@ -104,10 +104,10 @@ function MouseAdapter(bus, screen_container) {
     }
 
     function touch_start_handler(e) {
-        if (may_handle(e)) {
+        if(may_handle(e)) {
             var touches = e["changedTouches"];
 
-            if (touches && touches.length) {
+            if(touches && touches.length) {
                 var touch = touches[touches.length - 1];
                 last_x = touch.clientX;
                 last_y = touch.clientY;
@@ -116,22 +116,22 @@ function MouseAdapter(bus, screen_container) {
     }
 
     function touch_end_handler(e) {
-        if (left_down || middle_down || right_down) {
+        if(left_down || middle_down || right_down) {
             mouse.bus.send("mouse-click", [false, false, false]);
             left_down = middle_down = right_down = false;
         }
     }
 
     function mousemove_handler(e) {
-        if (!mouse.bus) {
+        if(!mouse.bus) {
             return;
         }
 
-        if (!may_handle(e)) {
+        if(!may_handle(e)) {
             return;
         }
 
-        if (!mouse.is_running) {
+        if(!mouse.is_running) {
             return;
         }
 
@@ -140,8 +140,8 @@ function MouseAdapter(bus, screen_container) {
 
         var touches = e["changedTouches"];
 
-        if (touches) {
-            if (touches.length) {
+        if(touches) {
+            if(touches.length) {
                 var touch = touches[touches.length - 1];
                 delta_x = touch.clientX - last_x;
                 delta_y = touch.clientY - last_y;
@@ -153,15 +153,15 @@ function MouseAdapter(bus, screen_container) {
             }
         }
         else {
-            if (typeof e["movementX"] === "number") {
+            if(typeof e["movementX"] === "number") {
                 delta_x = e["movementX"];
                 delta_y = e["movementY"];
             }
-            else if (typeof e["webkitMovementX"] === "number") {
+            else if(typeof e["webkitMovementX"] === "number") {
                 delta_x = e["webkitMovementX"];
                 delta_y = e["webkitMovementY"];
             }
-            else if (typeof e["mozMovementX"] === "number") {
+            else if(typeof e["mozMovementX"] === "number") {
                 delta_x = e["mozMovementX"];
                 delta_y = e["mozMovementY"];
             }
@@ -187,7 +187,7 @@ function MouseAdapter(bus, screen_container) {
 
         mouse.bus.send("mouse-delta", [delta_x, delta_y]);
 
-        if (screen_container) {
+        if(screen_container) {
             const absolute_x = e.pageX - screen_container.offsetLeft;
             const absolute_y = e.pageY - screen_container.offsetTop;
             mouse.bus.send("mouse-absolute", [
@@ -196,29 +196,29 @@ function MouseAdapter(bus, screen_container) {
     }
 
     function mousedown_handler(e) {
-        if (may_handle(e)) {
+        if(may_handle(e)) {
             click_event(e, true);
         }
     }
 
     function mouseup_handler(e) {
-        if (may_handle(e)) {
+        if(may_handle(e)) {
             click_event(e, false);
         }
     }
 
     function click_event(e, down) {
-        if (!mouse.bus) {
+        if(!mouse.bus) {
             return;
         }
 
-        if (e.which === 1) {
+        if(e.which === 1) {
             left_down = down;
         }
-        else if (e.which === 2) {
+        else if(e.which === 2) {
             middle_down = down;
         }
-        else if (e.which === 3) {
+        else if(e.which === 3) {
             right_down = down;
         }
         else {
@@ -229,17 +229,17 @@ function MouseAdapter(bus, screen_container) {
     }
 
     function mousewheel_handler(e) {
-        if (!may_handle(e)) {
+        if(!may_handle(e)) {
             return;
         }
 
         var delta_x = e.wheelDelta || -e.detail;
         var delta_y = 0;
 
-        if (delta_x < 0) {
+        if(delta_x < 0) {
             delta_x = -1;
         }
-        else if (delta_x > 0) {
+        else if(delta_x > 0) {
             delta_x = 1;
         }
 

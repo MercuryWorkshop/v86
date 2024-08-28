@@ -1,5 +1,6 @@
 export default [
     {
+        ignores: ["examples/xterm.js"],
         rules: {
             "eol-last": "error",
             //"no-extra-parens": "error",

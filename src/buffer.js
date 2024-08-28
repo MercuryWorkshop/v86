@@ -106,7 +106,7 @@
     }
 
     AsyncXHRBuffer.prototype.load = function () {
-        if (this.byteLength !== undefined) {
+        if(this.byteLength !== undefined) {
             this.onload && this.onload(Object.create(null));
             return;
         }
@@ -114,7 +114,7 @@
         // Determine the size using a request
 
         determine_size(this.filename, (error, size) => {
-            if (error) {
+            if(error) {
                 throw new Error("Cannot use: " + this.filename + ". " + error);
             }
             else {
@@ -134,20 +134,20 @@
         var number_of_blocks = len / BLOCK_SIZE;
         var block_index = offset / BLOCK_SIZE;
 
-        for (var i = 0; i < number_of_blocks; i++) {
+        for(var i = 0; i < number_of_blocks; i++) {
             var block = this.block_cache.get(block_index + i);
 
-            if (!block) {
+            if(!block) {
                 return;
             }
         }
 
-        if (number_of_blocks === 1) {
+        if(number_of_blocks === 1) {
             return this.block_cache.get(block_index);
         }
         else {
             var result = new Uint8Array(len);
-            for (var i = 0; i < number_of_blocks; i++) {
+            for(var i = 0; i < number_of_blocks; i++) {
                 result.set(this.block_cache.get(block_index + i), i * BLOCK_SIZE);
             }
             return result;
@@ -166,8 +166,8 @@
         dbg_assert(len);
 
         var block = this.get_from_cache(offset, len);
-        if (block) {
-            if (ASYNC_SAFE) {
+        if(block) {
+            if(ASYNC_SAFE) {
                 setTimeout(fn.bind(this, block), 0);
             }
             else {
@@ -178,7 +178,7 @@
 
         var requested_start = offset;
         var requested_length = len;
-        if (this.fixed_chunk_size) {
+        if(this.fixed_chunk_size) {
             requested_start = offset - (offset % this.fixed_chunk_size);
             requested_length = Math.ceil((offset - requested_start + len) / this.fixed_chunk_size) * this.fixed_chunk_size;
         }
@@ -187,7 +187,7 @@
             done: function done(buffer) {
                 var block = new Uint8Array(buffer);
                 this.handle_read(requested_start, requested_length, block);
-                if (requested_start === offset && requested_length === len) {
+                if(requested_start === offset && requested_length === len) {
                     fn(block);
                 }
                 else {
@@ -217,10 +217,10 @@
         var start_block = start / BLOCK_SIZE;
         var block_count = len / BLOCK_SIZE;
 
-        for (var i = 0; i < block_count; i++) {
+        for(var i = 0; i < block_count; i++) {
             var block = this.block_cache.get(start_block + i);
 
-            if (block === undefined) {
+            if(block === undefined) {
                 const data_slice = data.slice(i * BLOCK_SIZE, (i + 1) * BLOCK_SIZE);
                 this.block_cache.set(start_block + i, data_slice);
             }
@@ -249,13 +249,13 @@
         var start_block = offset / BLOCK_SIZE;
         var block_count = len / BLOCK_SIZE;
 
-        for (var i = 0; i < block_count; i++) {
+        for(var i = 0; i < block_count; i++) {
             const cached_block = this.block_cache.get(start_block + i);
 
-            if (cached_block) {
+            if(cached_block) {
                 block.set(cached_block, i * BLOCK_SIZE);
             }
-            else if (this.cache_reads) {
+            else if(this.cache_reads) {
                 this.block_cache.set(start_block + i, block.slice(i * BLOCK_SIZE, (i + 1) * BLOCK_SIZE));
             }
         }
@@ -304,9 +304,9 @@
         const state = [];
         const block_cache = [];
 
-        for (const [index, block] of this.block_cache) {
+        for(const [index, block] of this.block_cache) {
             dbg_assert(isFinite(index));
-            if (this.block_cache_is_write.has(index)) {
+            if(this.block_cache_is_write.has(index)) {
                 block_cache.push([index, block]);
             }
         }
@@ -323,7 +323,7 @@
         this.block_cache.clear();
         this.block_cache_is_write.clear();
 
-        for (const [index, block] of block_cache) {
+        for(const [index, block] of block_cache) {
             dbg_assert(isFinite(index));
             this.block_cache.set(index, block);
             this.block_cache_is_write.add(index);
@@ -350,7 +350,7 @@
 
         this.is_zstd = this.extension.endsWith(".zst");
 
-        if (!this.basename.endsWith("/")) {
+        if(!this.basename.endsWith("/")) {
             this.basename += "-";
         }
 
@@ -369,7 +369,7 @@
     }
 
     AsyncXHRPartfileBuffer.prototype.load = function () {
-        if (this.byteLength !== undefined) {
+        if(this.byteLength !== undefined) {
             this.onload && this.onload(Object.create(null));
             return;
         }
@@ -390,8 +390,8 @@
 
         const block = this.get_from_cache(offset, len);
 
-        if (block) {
-            if (ASYNC_SAFE) {
+        if(block) {
+            if(ASYNC_SAFE) {
                 setTimeout(fn.bind(this, block), 0);
             }
             else {
@@ -400,7 +400,7 @@
             return;
         }
 
-        if (this.fixed_chunk_size) {
+        if(this.fixed_chunk_size) {
             const start_index = Math.floor(offset / this.fixed_chunk_size);
             const m_offset = offset - start_index * this.fixed_chunk_size;
             dbg_assert(m_offset >= 0);
@@ -408,7 +408,7 @@
             const blocks = new Uint8Array(total_count * this.fixed_chunk_size);
             let finished = 0;
 
-            for (let i = 0; i < total_count; i++) {
+            for(let i = 0; i < total_count; i++) {
                 const offset = (start_index + i) * this.fixed_chunk_size;
 
                 const part_filename =
@@ -422,10 +422,10 @@
                 // XXX: unnecessary allocation
                 const block = this.get_from_cache(offset, this.fixed_chunk_size);
 
-                if (block) {
+                if(block) {
                     blocks.set(block, i * this.fixed_chunk_size);
                     finished++;
-                    if (finished === total_count) {
+                    if(finished === total_count) {
                         fn(blocks.subarray(m_offset, m_offset + len));
                     }
                 }
@@ -444,7 +444,7 @@
                             this.handle_read((start_index + i) * this.fixed_chunk_size, this.fixed_chunk_size | 0, block);
 
                             finished++;
-                            if (finished === total_count) {
+                            if(finished === total_count) {
                                 fn(blocks.subarray(m_offset, m_offset + len));
                             }
                         }.bind(this),
@@ -483,7 +483,7 @@
         this.file = file;
         this.byteLength = file.size;
 
-        if (file.size > (1 << 30)) {
+        if(file.size > (1 << 30)) {
             console.warn("SyncFileBuffer: Allocating buffer of " + (file.size >> 20) + " MB ...");
         }
 
@@ -512,7 +512,7 @@
             this.load_next(start + PART_SIZE);
         }.bind(this);
 
-        if (this.onprogress) {
+        if(this.onprogress) {
             this.onprogress({
                 loaded: start,
                 total: this.byteLength,
@@ -520,12 +520,12 @@
             });
         }
 
-        if (start < this.byteLength) {
+        if(start < this.byteLength) {
             var end = Math.min(start + PART_SIZE, this.byteLength);
             var slice = this.file.slice(start, end);
             (async () => {
                 filereader.readAsArrayBuffer(await slice);
-            })()
+            })();
         }
         else {
             this.file = undefined;
@@ -570,7 +570,7 @@
         dbg_assert(len);
 
         var block = this.get_from_cache(offset, len);
-        if (block) {
+        if(block) {
             fn(block);
             return;
         }
@@ -587,7 +587,7 @@
 
         (async () => {
             fr.readAsArrayBuffer(await this.file.slice(offset, offset + len));
-        })()
+        })();
     };
     AsyncFileBuffer.prototype.get_from_cache = AsyncXHRBuffer.prototype.get_from_cache;
     AsyncFileBuffer.prototype.set = AsyncXHRBuffer.prototype.set;
@@ -606,13 +606,13 @@
 
         var current_offset = 0;
 
-        for (var i = 0; i < existing_blocks.length; i++) {
+        for(var i = 0; i < existing_blocks.length; i++) {
             var block_index = existing_blocks[i];
             var block = this.block_cache.get(block_index);
             var start = block_index * BLOCK_SIZE;
             dbg_assert(start >= current_offset);
 
-            if (start !== current_offset) {
+            if(start !== current_offset) {
                 parts.push(this.file.slice(current_offset, start));
                 current_offset = start;
             }
@@ -621,7 +621,7 @@
             current_offset += block.length;
         }
 
-        if (current_offset !== this.file.size) {
+        if(current_offset !== this.file.size) {
             parts.push(this.file.slice(current_offset));
         }
 
@@ -631,10 +631,10 @@
         return file;
     };
 
-    if (typeof XMLHttpRequest === "undefined") {
+    if(typeof XMLHttpRequest === "undefined") {
         var determine_size = function (path, cb) {
             require("fs")["stat"](path, (err, stats) => {
-                if (err) {
+                if(err) {
                     cb(err);
                 }
                 else {
@@ -650,7 +650,7 @@
                     var header = http.getResponseHeader("Content-Range") || "";
                     var match = header.match(/\/(\d+)\s*$/);
 
-                    if (match) {
+                    if(match) {
                         cb(null, +match[1]);
                     }
                     else {
