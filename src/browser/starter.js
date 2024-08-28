@@ -296,11 +296,11 @@ V86.prototype.continue_init = async function(emulator, options)
         if(options.network_relay_url === "fetch")
         {
             this.network_adapter = new FetchNetworkAdapter(this.bus);
-        } 
-        else if (options.network_relay_url.startsWith("wisp://") || options.network_relay_url.startsWith("wisps://")) {
-            this.network_adapter = new WispNetworkAdapter(options.network_relay_url, this.bus);
         }
-        else 
+        else if(options.network_relay_url.startsWith("wisp://") || options.network_relay_url.startsWith("wisps://")) {
+            this.network_adapter = new WispNetworkAdapter(options.network_relay_url, this.bus, options);
+        }
+        else
         {
             this.network_adapter = new NetworkAdapter(options.network_relay_url, this.bus);
         }
@@ -1410,15 +1410,15 @@ function FileNotFoundError(message)
 FileNotFoundError.prototype = Error.prototype;
 
 // Closure Compiler's way of exporting
-if(typeof window !== "undefined")
-{
-    window["V86Starter"] = V86;
-    window["V86"] = V86;
-}
-else if(typeof module !== "undefined" && typeof module.exports !== "undefined")
+if(typeof module !== "undefined" && typeof module.exports !== "undefined")
 {
     module.exports["V86Starter"] = V86;
     module.exports["V86"] = V86;
+}
+else if(typeof window !== "undefined")
+{
+    window["V86Starter"] = V86;
+    window["V86"] = V86;
 }
 else if(typeof importScripts === "function")
 {

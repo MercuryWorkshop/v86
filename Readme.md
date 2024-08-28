@@ -80,10 +80,12 @@ Here's an overview of the operating systems supported in v86:
     [humphd/browser-vm](https://github.com/humphd/browser-vm) and
     [darin755/browser-buildroot](https://github.com/Darin755/browser-buildroot) have some useful scripts for building one.
   - [SkiffOS](https://github.com/skiffos/SkiffOS/tree/master/configs/browser/v86) (based on Buildroot) can cross-compile a custom image.
-  - Archlinux works. See [archlinux.md](docs/archlinux.md) for building an image.
+  - Arch Linux 32 works. See [archlinux.md](docs/archlinux.md) for building an image.
   - Debian works.
   - Ubuntu works up to the latest version that supported i386 (16.04 LTS or 18.04 LTS for some variants).
   - Alpine Linux works. An image can be built from a Dockerfile, see [tools/docker/alpine/](tools/docker/alpine/).
+  - Slackware works.
+  - Void Linux works.
 - ReactOS works.
 - FreeDOS, Windows 1.01 and MS-DOS run very well.
 - KolibriOS works.
@@ -131,17 +133,17 @@ for a full setup on Debian or
 - If you only want to embed v86 in a webpage you can use libv86.js. For usage,
   check out the [examples](examples/). You can download it from the release section.
 
-### Alternatively, to build using docker
+### Alternatively, to build using Docker
 
-- If you have docker installed, you can run the whole system inside a container.
-- See `tools/docker/exec` to find Dockerfile required for this.
+- If you have Docker installed, you can run the whole system inside a container.
+- See `tools/docker/exec` to find the Dockerfile required for this.
 - You can run `docker build -f tools/docker/exec/Dockerfile -t v86:alpine-3.19 .` from the root directory to generate docker image.
 - Then you can simply run `docker run -it -p 8000:8000 v86:alpine-3.19` to start the server.
 - Check `localhost:8000` for hosted server.
 
-### Running via Devcontainer
+### Running via Dev Container
 
-- If you are using an IDE that supports Devcontainers, such as Github Codespaces, VSCode Remote Container extension, or possibly others such as Jetbrains IDEA, you can setup the development environment in a Dev container.
+- If you are using an IDE that supports Dev Containers, such as GitHub Codespaces, the Visual Studio Code Remote Container extension, or possibly others such as Jetbrains' IntelliJ IDEA, you can setup the development environment in a Dev Container.
 - Follow the instructions from your development environment to setup the container.
 - Run the Task "Fetch images" in order to download images for testing.
 
