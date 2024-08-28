@@ -270,7 +270,8 @@ WispNetworkAdapter.prototype.send = function(data)
                 dest: packet.ipv4.src,
             };
             reply.udp = { sport: 53, dport: packet.udp.sport };
-            const result = await ((await fetch(`https://${this.doh_server}/dns-query`, {method: "POST", headers: [["content-type", "application/dns-message"]], body: packet.udp.data})).arrayBuffer());
+            const preferred_fetch = (window.anura?.net?.fetch) || fetch;
+            const result = await ((await preferred_fetch(`https://${this.doh_server}/dns-query`, {method: "POST", headers: [["content-type", "application/dns-message"]], body: packet.udp.data})).arrayBuffer());
             reply.udp.data = new Uint8Array(result);
             this.receive(make_packet(reply));
         })();
@@ -279,6 +280,12 @@ WispNetworkAdapter.prototype.send = function(data)
     if(packet.ntp) {
         // TODO: remove when this wisp client supports udp
         handle_fake_ntp(packet, this);
+        return;
+    }
+
+    // ICMP Ping
+    if(packet.icmp && packet.icmp.type === 8) {
+        handle_fake_ping(packet, this);
         return;
     }
 
