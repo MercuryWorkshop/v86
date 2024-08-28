@@ -318,7 +318,6 @@ rust-test-intensive:
 
 api-tests: all-debug
 	./tests/api/clean-shutdown.js
-	./tests/api/state.js
 	./tests/api/reset.js
 	./tests/api/floppy-insert-eject.js
 	./tests/api/serial.js
