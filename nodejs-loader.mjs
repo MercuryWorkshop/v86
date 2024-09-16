@@ -38,7 +38,7 @@ let files = [
     "src/sb16.js",
     "src/virtio.js",
     "src/virtio_console.js",
-    //"src/virtio_net.js",
+    "src/virtio_net.js",
     //"src/virtio_balloon.js",
     "src/bus.js",
 
@@ -50,7 +50,6 @@ let files = [
     "lib/filesystem.js",
     "lib/jor1k.js",
     "lib/marshall.js",
-    "lib/utf8.js",
 
     "src/browser/screen.js",
     "src/browser/keyboard.js",

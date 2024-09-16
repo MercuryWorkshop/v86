@@ -418,6 +418,7 @@ CPU.prototype.get_state = function()
     state[80] = this.devices.uart2;
     state[81] = this.devices.uart3;
     state[82] = this.devices.virtio_console;
+    state[83] = this.devices.virtio_net;
 
     return state;
 };
@@ -549,6 +550,7 @@ CPU.prototype.set_state = function(state)
     this.devices.uart2 && this.devices.uart2.set_state(state[80]);
     this.devices.uart3 && this.devices.uart3.set_state(state[81]);
     this.devices.virtio_console && this.devices.virtio_console.set_state(state[82]);
+    this.devices.virtio_net && this.devices.virtio_net.set_state(state[83]);
 
     this.fw_value = state[62];
 
@@ -687,11 +689,15 @@ CPU.prototype.reboot_internal = function()
 
     if(this.devices.virtio_9p)
     {
-        this.devices.virtio_9p.reset();
+        this.devices.virtio_9p.Reset();
     }
     if(this.devices.virtio_console)
     {
-        this.devices.virtio_console.reset();
+        this.devices.virtio_console.Reset();
+    }
+    if(this.devices.virtio_net)
+    {
+        this.devices.virtio_net.Reset();
     }
 
     this.load_bios();
@@ -702,16 +708,17 @@ CPU.prototype.reset_memory = function()
     this.mem8.fill(0);
 };
 
-/** @export */
-CPU.prototype.create_memory = function(size)
+CPU.prototype.create_memory = function(size, minimum_size)
 {
-    if(size < 1024 * 1024)
+    if(size < minimum_size)
     {
-        size = 1024 * 1024;
+        size = minimum_size;
+        dbg_log("Rounding memory size up to " + size, LOG_CPU);
     }
     else if((size | 0) < 0)
     {
         size = Math.pow(2, 31) - MMAP_BLOCK_SIZE;
+        dbg_log("Rounding memory size down to " + size, LOG_CPU);
     }
 
     size = ((size - 1) | (MMAP_BLOCK_SIZE - 1)) + 1 | 0;
@@ -728,10 +735,15 @@ CPU.prototype.create_memory = function(size)
     this.mem32s = v86util.view(Uint32Array, this.wasm_memory, memory_offset, size >> 2);
 };
 
+/**
+ * @param {BusConnector} device_bus
+ */
 CPU.prototype.init = function(settings, device_bus)
 {
-    this.create_memory(typeof settings.memory_size === "number" ?
-        settings.memory_size : 1024 * 1024 * 64);
+    this.create_memory(
+        settings.memory_size || 64 * 1024 * 1024,
+        settings.initrd ? 64 * 1024 * 1024 : 1024 * 1024,
+    );
 
     if(settings.disable_jit)
     {
@@ -928,8 +940,7 @@ CPU.prototype.init = function(settings, device_bus)
 
         this.devices.dma = new DMA(this);
 
-        this.devices.vga = new VGAScreen(this, device_bus,
-                settings.vga_memory_size || 8 * 1024 * 1024);
+        this.devices.vga = new VGAScreen(this, device_bus, settings.screen, settings.vga_memory_size || 8 * 1024 * 1024);
 
         this.devices.ps2 = new PS2(this, device_bus);
 
@@ -964,9 +975,13 @@ CPU.prototype.init = function(settings, device_bus)
 
         this.devices.pit = new PIT(this, device_bus);
 
-        if(settings.enable_ne2k)
+        if(settings.net_device.type === "ne2k")
         {
             this.devices.net = new Ne2k(this, device_bus, settings.preserve_mac_from_state_image, settings.mac_address_translation);
+        }
+        else if(settings.net_device.type === "virtio")
+        {
+            this.devices.virtio_net = new VirtioNet(this, device_bus, settings.preserve_mac_from_state_image);
         }
 
         if(settings.fs9p)
@@ -1674,17 +1689,3 @@ CPU.prototype.device_lower_irq = function(i)
         this.devices.ioapic.clear_irq(i);
     }
 };
-
-// Closure Compiler's way of exporting
-if(typeof module !== "undefined" && typeof module.exports !== "undefined")
-{
-    module.exports["CPU"] = CPU;
-}
-else if(typeof window !== "undefined")
-{
-    window["CPU"] = CPU;
-}
-else if(typeof importScripts === "function")
-{
-    self["CPU"] = CPU;
-}

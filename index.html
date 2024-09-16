@@ -70,11 +70,6 @@
         <h4>Setup</h4>
         <table>
             <tr>
-                <td><label for="bios">BIOS</label></td>
-                <td> <input type="file" id="bios"><br></td>
-            </tr>
-
-            <tr>
                 <td width="350"><label for="cd_image">CD image</label></td>
                 <td>
                     <input type="file" id="cd_image">
@@ -107,6 +102,10 @@
                 <td><input type="file" id="initrd"><br></td>
             </tr>
 
+            <tr>
+                <td><label for="bios">BIOS</label></td>
+                <td> <input type="file" id="bios"><br></td>
+            </tr>
 
             <tr>
                 <td colspan="2"><small>Disk images are not uploaded to the server</small><hr></td>
@@ -247,7 +246,6 @@
     <b>VGA</b><br>
     Mode: <span id="info_vga_mode"></span><br>
     Resolution: <span id="info_res">-</span><br>
-    BPP: <span id="info_bpp">-</span><br>
     <br>
     Mouse: <span id="info_mouse_enabled">No</span><br>
 

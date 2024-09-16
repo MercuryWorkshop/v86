@@ -40,7 +40,6 @@ else
             },
             baseurl: path.join(V86_ROOT, "/images/arch/"),
         },
-        screen_dummy: true,
         disable_jit: +process.env.DISABLE_JIT,
         log_level: 0,
     });
@@ -48,7 +47,7 @@ else
 
 emulator.bus.register("emulator-started", function()
 {
-    console.error("Booting now, please stand by");
+    console.log("Booting now, please stand by");
     start_time = Date.now();
 });
 

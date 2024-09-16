@@ -372,7 +372,6 @@
                 fda: {
                     url: host + "freedos722.img",
                     size: 737280,
-                    async: false,
                 },
                 name: "FreeDOS",
             },
@@ -400,6 +399,15 @@
                 homepage: "https://psychoslinux.gitlab.io/DOS/INDEX.HTM",
             },
             {
+                id: "86dos",
+                fda: {
+                    url: host + "pc86dos.img",
+                    size: 163840,
+                },
+                name: "86-DOS",
+                homepage: "https://www.os2museum.com/wp/pc-86-dos/",
+            },
+            {
                 id: "oberon",
                 hda: {
                     url: host + "oberon.img",
@@ -413,9 +421,17 @@
                 fda: {
                     url: host + "windows101.img",
                     size: 1474560,
-                    async: false,
                 },
                 name: "Windows",
+            },
+            {
+                id: "windows2",
+                hda: {
+                    url: host + "windows2.img",
+                    size: 4177920,
+                    async: false,
+                },
+                name: "Windows 2.03",
             },
             {
                 id: "linux26",
@@ -450,6 +466,17 @@
                 bzimage: {
                     url: host + "buildroot-bzimage.bin",
                     size: 5166352,
+                    async: false,
+                },
+                name: "Buildroot Linux",
+                filesystem: {},
+                cmdline: "tsc=reliable mitigations=off random.trust_cpu=on",
+            },
+            {
+                id: "buildroot6",
+                bzimage: {
+                    url: host + "buildroot-bzimage68.bin",
+                    size: 10068480,
                     async: false,
                 },
                 name: "Buildroot Linux",
@@ -536,7 +563,6 @@
                             host + "kolibri.img" :
                             "//builds.kolibrios.org/en_US/data/data/kolibri.img",
                     size: 1474560,
-                    async: false,
                 },
                 name: "KolibriOS",
                 homepage: "https://kolibrios.org/en/",
@@ -546,7 +572,6 @@
                 fda: {
                     url: host + "kolibri.img",
                     size: 1474560,
-                    async: false,
                 },
                 name: "KolibriOS",
             },
@@ -630,7 +655,6 @@
                 id: "solos",
                 fda: {
                     url: host + "os8.img",
-                    async: false,
                     size: 1474560,
                 },
                 name: "Sol OS",
@@ -640,7 +664,6 @@
                 id: "bootchess",
                 fda: {
                     url: host + "bootchess.img",
-                    async: false,
                     size: 1474560,
                 },
                 name: "BootChess",
@@ -650,7 +673,6 @@
                 id: "bootbasic",
                 fda: {
                     url: host + "bootbasic.img",
-                    async: false,
                     size: 1474560,
                 },
                 name: "bootBASIC",
@@ -660,7 +682,6 @@
                 id: "sectorlisp",
                 fda: {
                     url: host + "sectorlisp-friendly.bin",
-                    async: false,
                     size: 512,
                 },
                 name: "SectorLISP",
@@ -670,7 +691,6 @@
                 id: "sectorforth",
                 fda: {
                     url: host + "sectorforth.img",
-                    async: false,
                     size: 512,
                 },
                 name: "sectorforth",
@@ -680,7 +700,6 @@
                 id: "floppybird",
                 fda: {
                     url: host + "floppybird.img",
-                    async: false,
                     size: 1474560,
                 },
                 name: "Floppy Bird",
@@ -690,7 +709,6 @@
                 id: "stillalive",
                 fda: {
                     url: host + "stillalive-os.img",
-                    async: false,
                     size: 368640,
                 },
                 name: "Still Alive",
@@ -700,7 +718,6 @@
                 id: "hello-v86",
                 fda: {
                     url: host + "hello-v86.img",
-                    async: false,
                     size: 512,
                 },
                 name: "Hello v86",
@@ -794,23 +811,32 @@
             },
             {
                 id: "windows95",
-                memory_size: 32 * 1024 * 1024,
+                memory_size: 64 * 1024 * 1024,
+                // old image:
+                //memory_size: 32 * 1024 * 1024,
+                //hda: {
+                //    url: host + "w95/.img",
+                //    size: 242049024,
+                //    async: true,
+                //    fixed_chunk_size: 256 * 1024,
+                //    use_parts: true,
+                //},
+                //state: { url: host + "windows95_state.bin.zst" },
                 hda: {
-                    url: host + "w95/.img",
-                    size: 242049024,
+                    url: host + "windows95-v2/.img",
+                    size: 471859200,
                     async: true,
                     fixed_chunk_size: 256 * 1024,
                     use_parts: true,
                 },
                 name: "Windows 95",
-                state: { url: host + "windows95_state.bin.zst" },
             },
             {
                 id: "windows95-boot",
-                memory_size: 32 * 1024 * 1024,
+                memory_size: 64 * 1024 * 1024,
                 hda: {
-                    url: host + "w95/.img",
-                    size: 242049024,
+                    url: host + "windows95-v2/.img",
+                    size: 471859200,
                     async: true,
                     fixed_chunk_size: 256 * 1024,
                     use_parts: true,
@@ -927,7 +953,6 @@
                 fda: {
                     url: host + "snowdrop.img",
                     size: 1440 * 1024,
-                    async: false,
                 },
                 name: "Snowdrop",
                 homepage: "http://www.sebastianmihai.com/snowdrop/",
@@ -946,7 +971,6 @@
                 fda: {
                     url: host + "qnx-demo-network-4.05.img",
                     size: 1474560,
-                    async: false
                 },
                 name: "QNX 4.05",
             },
@@ -984,7 +1008,6 @@
                 fda: {
                     url: host + "mobius-fd-release5.img",
                     size: 1474560,
-                    async: false,
                 },
                 name: "Mobius",
             },
@@ -1022,6 +1045,17 @@
                 },
                 name: "Tinycore",
                 homepage: "http://www.tinycorelinux.net/",
+            },
+            {
+                id: "slitaz",
+                memory_size: 512 * 1024 * 1024,
+                hda: {
+                    url: host + "slitaz-rolling-2024.iso",
+                    size: 56573952,
+                    async: false,
+                },
+                name: "SliTaz",
+                homepage: "https://slitaz.org/",
             },
             {
                 id: "freenos",
@@ -1085,7 +1119,6 @@
                 fda: {
                     url: host + "PCMOS386-9-user-patched.img",
                     size: 1440 * 1024,
-                    async: false,
                 },
                 name: "PC-MOS/386",
                 homepage: "https://github.com/roelandjansen/pcmos386v501",
@@ -1095,7 +1128,6 @@
                 fda: {
                     url: host + "jx-demo.img",
                     size: 1440 * 1024,
-                    async: false,
                 },
                 name: "JX",
                 homepage: "https://www4.cs.fau.de/Projects/JX/index.html",
@@ -1105,7 +1137,6 @@
                 fda: {
                     url: host + "hOp-0.8.img",
                     size: 1440 * 1024,
-                    async: false,
                 },
                 name: "House",
                 homepage: "https://programatica.cs.pdx.edu/House/",
@@ -1135,10 +1166,63 @@
                 name: "MikeOS",
                 cdrom: {
                     url: host + "mikeos.iso",
-                    size: 11429888,
+                    size: 3311616,
                     async: false,
                 },
                 homepage: "https://mikeos.sourceforge.net/",
+            },
+            {
+                id: "bluejay",
+                name: "Blue Jay",
+                fda: {
+                    url: host + "bj050.img",
+                    size: 1474560,
+                },
+                homepage: "https://archiveos.org/blue-jay/",
+            },
+            {
+                id: "t3xforth",
+                name: "T3XFORTH",
+                fda: {
+                    url: host + "t3xforth.img",
+                    size: 1474560,
+                },
+                homepage: "https://t3x.org/t3xforth/",
+            },
+            {
+                id: "nanoshell",
+                name: "NanoShell",
+                cdrom: {
+                    url: host + "nanoshell.iso",
+                    size: 6785024,
+                },
+                homepage: "https://github.com/iProgramMC/NanoShellOS",
+            },
+            {
+                id: "catk",
+                name: "CatK",
+                cdrom: {
+                    url: host + "catkernel.iso",
+                    size: 11968512,
+                },
+                homepage: "https://catk.neocities.org/",
+            },
+            {
+                id: "mcp",
+                name: "M/CP",
+                fda: {
+                    url: host + "mcp2.img",
+                    size: 512,
+                },
+                homepage: "https://github.com/ybuzoku/MCP",
+            },
+            {
+                id: "ibm-exploring",
+                name: "Exploring The IBM Personal Computer",
+                fda: {
+                    url: host + "ibm-exploring.img",
+                    size: 368640,
+                },
             },
         ];
 
@@ -1334,6 +1418,12 @@
                     }
                 }
             }
+        }
+
+        if(DEBUG && ON_LOCALHOST)
+        {
+            // don't use online relay in debug mode
+            $("networking_proxy").value = "ws://localhost:8080/";
         }
 
         function start_profile(infos)
@@ -1608,7 +1698,10 @@
 
             boot_order: settings.boot_order || parseInt($("boot_order").value, 16) || 0,
 
-            network_relay_url: ON_LOCALHOST ? "ws://localhost:8080/" : networking_proxy,
+            net_device: {
+                type: "ne2k",
+                relay_url: networking_proxy,
+            },
 
             bios: settings.bios || bios,
             vga_bios: settings.bios ? null : vga_bios,
@@ -1913,23 +2006,11 @@
             $("info_mouse_enabled").textContent = is_enabled ? "Yes" : "No";
         });
 
-        emulator.add_listener("screen-set-mode", function(is_graphical)
+        emulator.add_listener("screen-set-size", function(args)
         {
-            if(is_graphical)
-            {
-                $("info_vga_mode").textContent = "Graphical";
-            }
-            else
-            {
-                $("info_vga_mode").textContent = "Text";
-                $("info_res").textContent = "-";
-                $("info_bpp").textContent = "-";
-            }
-        });
-        emulator.add_listener("screen-set-size-graphical", function(args)
-        {
-            $("info_res").textContent = args[0] + "x" + args[1];
-            $("info_bpp").textContent = args[4];
+            const [w, h, bpp] = args;
+            $("info_res").textContent = w + "x" + h + (bpp ? "x" + bpp : "");
+            $("info_vga_mode").textContent = bpp ? "Graphical" : "Text";
         });
 
 

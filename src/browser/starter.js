@@ -3,11 +3,11 @@
 /**
  * Constructor for emulator instances.
  *
- * Usage: `var emulator = new V86(options);`
+ * Usage: `new V86(options);`
  *
  * Options can have the following properties (all optional, default in parenthesis):
  *
- * - `memory_size number` (16 * 1024 * 1024) - The memory size in bytes, should
+ * - `memory_size number` (64 * 1024 * 1024) - The memory size in bytes, should
  *   be a power of 2.
  * - `vga_memory_size number` (8 * 1024 * 1024) - VGA memory size in bytes.
  *
@@ -19,7 +19,15 @@
  *
  * - `network_relay_url string` (No network card) - The url of a server running
  *   websockproxy. See [networking.md](networking.md). Setting this will
- *   enable an emulated network card.
+ *   enable an emulated ne2k network card. Only provided for backwards
+ *   compatibility, use `net_device` instead.
+ *
+ * - `net_device Object` (null) - An object with the following properties:
+ *   - `relay_url: string` - See above
+ *   - `type: "ne2k" | "virtio"` - the type of the emulated cards
+ *
+ * - `net_devices Array<Object>` - Like `net_device`, but allows specifying
+ *   more than one network card (up to 4). (currently not implemented)
  *
  * - `bios Object` (No bios) - Either a url pointing to a bios or an
  *   ArrayBuffer, see below.
@@ -45,7 +53,12 @@
  *   see [serial.html](../examples/serial.html).
  *
  * - `screen_container HTMLElement` (No screen) - An HTMLElement. This should
- *   have a certain structure, see [basic.html](../examples/basic.html).
+ *   have a certain structure, see [basic.html](../examples/basic.html). Only
+ *   provided for backwards compatibility, use `screen` instead.
+ *
+ * - `screen Object` (No screen) - An object with the following properties:
+ *   - `container HTMLElement` - An HTMLElement, see above.
+ *   - `disable_autoscale boolean` (false) - Disable automatic scaling of small resolutions.
  *
  * ***
  *
@@ -87,6 +100,9 @@
       disable_mouse: (boolean|undefined),
       disable_keyboard: (boolean|undefined),
       wasm_fn: (Function|undefined),
+      screen: ({
+          disable_autoscale: (boolean|undefined),
+      } | undefined),
     }} options
  * @constructor
  */
@@ -247,11 +263,13 @@ V86.prototype.continue_init = async function(emulator, options)
     this.bus.register("emulator-stopped", function()
     {
         this.cpu_is_running = false;
+        this.screen_adapter.pause();
     }, this);
 
     this.bus.register("emulator-started", function()
     {
         this.cpu_is_running = true;
+        this.screen_adapter.continue();
     }, this);
 
     var settings = {};
@@ -286,29 +304,35 @@ V86.prototype.continue_init = async function(emulator, options)
     settings.mac_address_translation = options.mac_address_translation;
     settings.cpuid_level = options.cpuid_level;
     settings.virtio_console = options.virtio_console;
+    settings.virtio_net = options.virtio_net;
 
-    if(options.network_adapter)
+    const relay_url = options.network_relay_url || options.net_device && options.net_device.relay_url;
+    if(relay_url)
     {
-        this.network_adapter = options.network_adapter(this.bus);
-    }
-    else if(options.network_relay_url)
-    {
-        if(options.network_relay_url === "fetch")
+        // TODO: remove bus, use direct calls instead
+        if(relay_url === "fetch")
         {
             this.network_adapter = new FetchNetworkAdapter(this.bus);
         }
-        else if(options.network_relay_url.startsWith("wisp://") || options.network_relay_url.startsWith("wisps://")) {
-            this.network_adapter = new WispNetworkAdapter(options.network_relay_url, this.bus, options);
+        else if(relay_url.startsWith("wisp://") || relay_url.startsWith("wisps://"))
+        {
+            this.network_adapter = new WispNetworkAdapter(relay_url, this.bus, options);
         }
         else
         {
-            this.network_adapter = new NetworkAdapter(options.network_relay_url, this.bus);
+            this.network_adapter = new NetworkAdapter(relay_url, this.bus);
         }
     }
 
     // Enable unconditionally, so that state images don't miss hardware
     // TODO: Should be properly fixed in restore_state
-    settings.enable_ne2k = true;
+    settings.net_device = options.net_device || { type: "ne2k" };
+
+    const screen_options = options.screen || {};
+    if(options.screen_container)
+    {
+        screen_options.container = options.screen_container;
+    }
 
     if(!options.disable_keyboard)
     {
@@ -316,17 +340,18 @@ V86.prototype.continue_init = async function(emulator, options)
     }
     if(!options.disable_mouse)
     {
-        this.mouse_adapter = new MouseAdapter(this.bus, options.screen_container);
+        this.mouse_adapter = new MouseAdapter(this.bus, screen_options.container);
     }
 
-    if(options.screen_container)
+    if(screen_options.container)
     {
-        this.screen_adapter = new ScreenAdapter(options.screen_container, this.bus);
+        this.screen_adapter = new ScreenAdapter(screen_options, () => this.v86.cpu.devices.vga.screen_fill_buffer());
     }
-    else if(options.screen_dummy)
+    else
     {
-        this.screen_adapter = new DummyScreenAdapter(this.bus);
+        this.screen_adapter = new DummyScreenAdapter();
     }
+    settings.screen = this.screen_adapter;
 
     if(options.serial_container)
     {
@@ -416,6 +441,12 @@ V86.prototype.continue_init = async function(emulator, options)
         {
             // Ignore async for these because they must be available before boot.
             // This should make result.buffer available after the object is loaded
+            file.async = false;
+        }
+
+        if(name === "fda" || name === "fdb")
+        {
+            // small, doesn't make sense loading asynchronously
             file.async = false;
         }
 
@@ -600,7 +631,7 @@ V86.prototype.continue_init = async function(emulator, options)
 
         this.serial_adapter && this.serial_adapter.show && this.serial_adapter.show();
 
-        this.bus.send("cpu-init", settings);
+        this.v86.init(settings);
 
         if(settings.initial_state)
         {
@@ -614,7 +645,7 @@ V86.prototype.continue_init = async function(emulator, options)
 
         if(options.autostart)
         {
-            this.bus.send("cpu-run");
+            this.v86.run();
         }
 
         this.emulator_bus.send("emulator-loaded");
@@ -765,7 +796,7 @@ V86.prototype.get_bzimage_initrd_from_filesystem = function(filesystem)
  */
 V86.prototype.run = async function()
 {
-    this.bus.send("cpu-run");
+    this.v86.run();
 };
 
 /**
@@ -785,7 +816,7 @@ V86.prototype.stop = async function()
             resolve();
         };
         this.add_listener("emulator-stopped", listener);
-        this.bus.send("cpu-stop");
+        this.v86.stop();
     });
 };
 
@@ -812,7 +843,7 @@ V86.prototype.destroy = async function()
  */
 V86.prototype.restart = function()
 {
-    this.bus.send("cpu-restart");
+    this.v86.restart();
 };
 
 /**
@@ -822,7 +853,7 @@ V86.prototype.restart = function()
  * The callback function gets a single argument which depends on the event.
  *
  * @param {string} event Name of the event.
- * @param {function(*)} listener The callback function.
+ * @param {function(?)} listener The callback function.
  * @export
  */
 V86.prototype.add_listener = function(event, listener)
@@ -1177,10 +1208,9 @@ V86.prototype.serial_set_clear_to_send = function(serial, status)
  * @param {string} path Path for the mount point
  * @param {string|undefined} baseurl
  * @param {string|undefined} basefs As a JSON string
- * @param {function(Object)=} callback
  * @export
  */
-V86.prototype.mount_fs = async function(path, baseurl, basefs, callback)
+V86.prototype.mount_fs = async function(path, baseurl, basefs)
 {
     let file_storage = new MemoryFileStorage();
 
@@ -1189,39 +1219,26 @@ V86.prototype.mount_fs = async function(path, baseurl, basefs, callback)
         file_storage = new ServerFileStorageWrapper(file_storage, baseurl);
     }
     const newfs = new FS(file_storage, this.fs9p.qidcounter);
-    const mount = () =>
-    {
-        const idx = this.fs9p.Mount(path, newfs);
-        if(!callback)
-        {
-            return;
-        }
-        if(idx === -ENOENT)
-        {
-            callback(new FileNotFoundError());
-        }
-        else if(idx === -EEXIST)
-        {
-            callback(new FileExistsError());
-        }
-        else if(idx < 0)
-        {
-            dbg_assert(false, "Unexpected error code: " + (-idx));
-            callback(new Error("Failed to mount. Error number: " + (-idx)));
-        }
-        else
-        {
-            callback(null);
-        }
-    };
     if(baseurl)
     {
         dbg_assert(typeof basefs === "object", "Filesystem: basefs must be a JSON object");
-        newfs.load_from_json(basefs, () => mount());
+        newfs.load_from_json(basefs);
     }
-    else
+
+    const idx = this.fs9p.Mount(path, newfs);
+
+    if(idx === -ENOENT)
     {
-        mount();
+        throw new FileNotFoundError();
+    }
+    else if(idx === -EEXIST)
+    {
+        throw new FileExistsError();
+    }
+    else if(idx < 0)
+    {
+        dbg_assert(false, "Unexpected error code: " + (-idx));
+        throw new Error("Failed to mount. Error number: " + (-idx));
     }
 };
 
@@ -1289,6 +1306,10 @@ V86.prototype.read_file = async function(file)
     }
 };
 
+/*
+ * @deprecated
+ * Use wait_until_vga_screen_contains etc.
+ */
 V86.prototype.automatically = function(steps)
 {
     const run = (steps) =>
@@ -1310,18 +1331,7 @@ V86.prototype.automatically = function(steps)
 
         if(step.vga_text)
         {
-            const screen = this.screen_adapter.get_text_screen();
-
-            for(const line of screen)
-            {
-                if(line.includes(step.vga_text))
-                {
-                    run(remaining_steps);
-                    return;
-                }
-            }
-
-            setTimeout(() => run(steps), 1000);
+            this.wait_until_vga_screen_contains(step.vga_text).then(() => run(remaining_steps));
             return;
         }
 
@@ -1352,7 +1362,54 @@ V86.prototype.automatically = function(steps)
     };
 
     run(steps);
+};
 
+V86.prototype.wait_until_vga_screen_contains = function(text)
+{
+    return new Promise(resolve =>
+    {
+        function test_line(line)
+        {
+            return typeof text === "string" ? line.includes(text) : text.test(line);
+        }
+
+        for(const line of this.screen_adapter.get_text_screen())
+        {
+            if(test_line(line))
+            {
+                resolve(true);
+                return;
+            }
+        }
+
+        const changed_rows = new Set();
+
+        function put_char(args)
+        {
+            const [row, col, char] = args;
+            changed_rows.add(col);
+        }
+
+        const check = () =>
+        {
+            for(const row of changed_rows)
+            {
+                const line = this.screen_adapter.get_text_row(row);
+                if(test_line(line))
+                {
+                    this.remove_listener("screen-put-char", put_char);
+                    resolve();
+                    return;
+                }
+            }
+
+            changed_rows.clear();
+            setTimeout(check, 100);
+        };
+        check();
+
+        this.add_listener("screen-put-char", put_char);
+    });
 };
 
 /**
@@ -1412,17 +1469,14 @@ FileNotFoundError.prototype = Error.prototype;
 // Closure Compiler's way of exporting
 if(typeof module !== "undefined" && typeof module.exports !== "undefined")
 {
-    module.exports["V86Starter"] = V86;
     module.exports["V86"] = V86;
 }
 else if(typeof window !== "undefined")
 {
-    window["V86Starter"] = V86;
     window["V86"] = V86;
 }
 else if(typeof importScripts === "function")
 {
     // web worker
-    self["V86Starter"] = V86;
     self["V86"] = V86;
 }
