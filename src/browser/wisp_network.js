@@ -60,7 +60,10 @@ WispNetworkAdapter.prototype.send_packet = function(data, type, stream_id) {
         this.congested_buffer.push({data: data, type: type});
     }
 };
-
+/**
+ * 
+ * @param {Uint8Array} frame 
+ */
 WispNetworkAdapter.prototype.process_incoming_wisp_frame = function(frame) {
     const view = new DataView(frame.buffer);
     const stream_id = view.getUint32(1, true);
@@ -93,6 +96,15 @@ WispNetworkAdapter.prototype.process_incoming_wisp_frame = function(frame) {
             delete this.connections[stream_id];
             break;
         case 5: // PROTOEXT
+            var v2 = this.parse_wisp_v2(frame.slice(7));
+            if (v2[4]) { // MOTD
+                window.anura && window.anura.notifications.add({
+                    title: "WISP v2 server MOTD",
+                    description: new TextDecoder().decode(v2[4]),
+                    timeout: 60000
+                });
+            } 
+            // console.log("parsed v2", ));
             dbg_log("got a wisp V2 upgrade request, ignoring", LOG_NET);
             // Not responding, this is wisp v1 client not wisp v2;
             break;
@@ -101,6 +113,33 @@ WispNetworkAdapter.prototype.process_incoming_wisp_frame = function(frame) {
     }
 };
 
+/**
+ * 
+ * @param {Uint8Array} frame 
+ */
+WispNetworkAdapter.prototype.parse_wisp_v2 = function(frame) {
+    const exts = {};
+    console.log("extframe", frame);
+    while (1) {
+        const view = new DataView(frame.buffer);
+        const type = view.getUint8(0);
+        const length = view.getUint32(1, true);
+        console.log("frame type: " + type);
+        console.log("frame length: " + length);
+        const payload = frame.slice(1 + 4, 1 + 4 + length);
+        console.log("frame payload: ",  payload);
+        exts[type] = payload;
+        frame = frame.slice(1 + 4 + length);
+        if (frame.length === 0) {
+            break;
+        }
+    }
+    this.send_wisp_frame({
+        type: "INFO",
+        stream_id: 0
+    });
+    return exts;
+};
 
 // FrameObj will be the following
 // FrameObj.stream_id (number)
@@ -153,8 +192,16 @@ WispNetworkAdapter.prototype.send_wisp_frame = function(frame_obj) {
             view = new DataView(full_packet.buffer);
             view.setUint8(0, 0x04);                     // TYPE
             view.setUint32(1, frame_obj.stream_id, true); // Stream ID
-            view.setUint8(5, frame_obj.reason);          // Packet size
+            view.setUint8(5, frame_obj.reason);          // close reason
             break;
+        case "INFO":
+            // No extensions used, turn blank
+            full_packet = new Uint8Array(7);
+            view = new DataView(full_packet.buffer);
+            view.setUint8(0, 0x05);     // TYPE
+            view.setUint32(1, 0, true); // Stream ID (always 0)
+            view.setUint8(5, 2);
+            view.setUint8(6, 0);
         default:
             dbg_log("Client tried to send unknown packet: " + frame_obj.type, LOG_NET);
 
