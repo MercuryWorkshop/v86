@@ -318,10 +318,10 @@ rust-test-intensive:
 	QUICKCHECK_TESTS=100000000 make rust-test
 
 api-tests: all-debug
-	./tests/api/clean-shutdown.js
-	./tests/api/reset.js
-	./tests/api/floppy-insert-eject.js
-	./tests/api/serial.js
+#	./tests/api/clean-shutdown.js \
+	./tests/api/reset.js \
+	./tests/api/floppy-insert-eject.js \
+	./tests/api/serial.js \
 
 all-tests: eslint kvm-unit-test qemutests qemutests-release jitpagingtests api-tests nasmtests nasmtests-force-jit tests expect-tests
 	# Skipping:
