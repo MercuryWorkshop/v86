@@ -2,31 +2,23 @@
 
 (function()
 {
-    /** @const */
-    var ON_LOCALHOST = !location.hostname.endsWith("copy.sh");
+    const ON_LOCALHOST = !location.hostname.endsWith("copy.sh");
 
-    /**
-     * @return {Object.<string, string>}
-     */
-    function get_query_arguments()
-    {
-        var query = location.search.substr(1).split("&");
-        var parameters = {};
-
-        for(var i = 0; i < query.length; i++)
-        {
-            var param = query[i].split("=");
-            parameters[param[0]] = decodeURIComponent(param.slice(1).join("="));
-        }
-
-        return parameters;
-    }
+    const DEFAULT_NETWORKING_PROXIES = ["wss://relay.widgetry.org/", "ws://localhost:8080/"];
+    const DEFAULT_MEMORY_SIZE = 128;
+    const DEFAULT_VGA_MEMORY_SIZE = 8;
+    const DEFAULT_BOOT_ORDER = 0;
 
     function set_title(text)
     {
         document.title = text + " - Virtual x86" +  (DEBUG ? " - debug" : "");
         const description = document.querySelector("meta[name=description]");
         description && (description.content = "Running " + text);
+    }
+
+    function bool_arg(x)
+    {
+        return !!x && x !== "0";
     }
 
     function format_timestamp(time)
@@ -47,11 +39,11 @@
         }
     }
 
-    var progress_ticks = 0;
+    let progress_ticks = 0;
 
     function show_progress(e)
     {
-        var el = $("loading");
+        const el = $("loading");
         el.style.display = "block";
 
         if(e.file_name.endsWith(".wasm"))
@@ -68,7 +60,7 @@
             return;
         }
 
-        var line = "Downloading images ";
+        let line = "Downloading images ";
 
         if(typeof e.file_index === "number" && e.file_count)
         {
@@ -99,7 +91,7 @@
         return document.getElementById(id);
     }
 
-    // these values are stored in localStorage
+    // These values were previously stored in localStorage
     const elements_to_restore = [
         "memory_size",
         "video_memory_size",
@@ -108,6 +100,14 @@
         "enable_acpi",
         "boot_order",
     ];
+    for(const item of elements_to_restore)
+    {
+        try
+        {
+            window.localStorage.removeItem(item);
+        }
+        catch(e) {}
+    }
 
     function onload()
     {
@@ -117,84 +117,11 @@
             return;
         }
 
-        var settings = {};
-
-        $("start_emulation").onclick = function()
+        $("start_emulation").onclick = function(e)
         {
-            // Save entered options into the local storage
-            for(const id of elements_to_restore)
-            {
-                const element = $(id);
-                if(element)
-                {
-                    if(element.tagName === "SELECT" || element.type !== "checkbox")
-                    {
-                        window.localStorage.setItem(id, element.value);
-                    }
-                    else
-                    {
-                        window.localStorage.setItem(id, element.checked);
-                    }
-                }
-            }
-
-            $("boot_options").style.display = "none";
-            set_profile("custom");
-
-            var images = [];
-            var last_file;
-
-            var bios = $("bios").files[0];
-            if(bios)
-            {
-                last_file = bios;
-                settings.bios = { buffer: bios };
-            }
-
-            var floppy_file = $("floppy_image").files[0];
-            if(floppy_file)
-            {
-                last_file = floppy_file;
-                settings.fda = { buffer: floppy_file };
-            }
-
-            var cd_file = $("cd_image").files[0];
-            if(cd_file)
-            {
-                last_file = cd_file;
-                settings.cdrom = { buffer: cd_file };
-            }
-
-            var hda_file = $("hda_image").files[0];
-            if(hda_file)
-            {
-                last_file = hda_file;
-                settings.hda = { buffer: hda_file };
-            }
-
-            var hdb_file = $("hdb_image") && $("hdb_image").files[0];
-            if(hdb_file)
-            {
-                last_file = hdb_file;
-                settings.hdb = { buffer: hdb_file };
-            }
-
-            if($("multiboot_image"))
-            {
-                var multiboot_file = $("multiboot_image").files[0];
-                if(multiboot_file)
-                {
-                    last_file = multiboot_file;
-                    settings.multiboot = { buffer: multiboot_file };
-                }
-            }
-
-            if(last_file)
-            {
-                set_title(last_file.name);
-            }
-
-            start_emulation(settings);
+            start_emulation(null, null);
+            $("start_emulation").blur();
+            e.preventDefault();
         };
 
         if(DEBUG)
@@ -202,11 +129,17 @@
             debug_onload();
         }
 
-        const query_args = get_query_arguments();
-        const host = query_args["cdn"] || (ON_LOCALHOST ? "images/" : "//i.copy.sh/");
+        if(DEBUG && ON_LOCALHOST)
+        {
+            // don't use online relay in debug mode
+            $("relay_url").value = "ws://localhost:8080/";
+        }
+
+        const query_args = new URLSearchParams(location.search);
+        const host = query_args.get("cdn") || (ON_LOCALHOST ? "images/" : "//i.copy.sh/");
 
         // Abandonware OS images are from https://winworldpc.com/library/operating-systems
-        var oses = [
+        const oses = [
             {
                 id: "archlinux",
                 name: "Arch Linux",
@@ -216,6 +149,7 @@
                 filesystem: {
                     baseurl: host + "arch/",
                 },
+                net_device_type: "virtio",
             },
             {
                 id: "archlinux-boot",
@@ -237,6 +171,7 @@
                     "init=/usr/bin/init-openrc net.ifnames=0 biosdevname=0",
                 ].join(" "),
                 bzimage_initrd_from_filesystem: true,
+                net_device_type: "virtio",
             },
             {
                 id: "copy/skiffos",
@@ -311,8 +246,10 @@
                 id: "helenos",
                 memory_size: 256 * 1024 * 1024,
                 cdrom: {
-                    url: host + "HelenOS-0.11.2-ia32.iso",
-                    size: 25765888,
+                    //url: host + "HelenOS-0.11.2-ia32.iso",
+                    //size: 25765888,
+                    url: host + "HelenOS-0.14.1-ia32.iso",
+                    size: 25792512,
                     async: false,
                 },
                 name: "HelenOS",
@@ -673,10 +610,19 @@
                 id: "bootbasic",
                 fda: {
                     url: host + "bootbasic.img",
-                    size: 1474560,
+                    size: 512,
                 },
                 name: "bootBASIC",
                 homepage: "https://github.com/nanochess/bootBASIC",
+            },
+            {
+                id: "bootlogo",
+                fda: {
+                    url: host + "bootlogo.img",
+                    size: 512,
+                },
+                name: "bootLogo",
+                homepage: "https://github.com/nanochess/bootLogo",
             },
             {
                 id: "sectorlisp",
@@ -721,6 +667,33 @@
                     size: 512,
                 },
                 name: "Hello v86",
+            },
+            {
+                id: "tetros",
+                fda: {
+                    url: host + "tetros.img",
+                    size: 512,
+                },
+                name: "TetrOS",
+                homepage: "https://github.com/daniel-e/tetros",
+            },
+            {
+                id: "dino",
+                fda: {
+                    url: host + "bootdino.img",
+                    size: 512,
+                },
+                name: "dino",
+                homepage: "https://github.com/franeklubi/dino",
+            },
+            {
+                id: "bootrogue",
+                fda: {
+                    url: host + "bootrogue.img",
+                    size: 512,
+                },
+                name: "bootRogue",
+                homepage: "https://github.com/nanochess/bootRogue",
             },
             {
                 id: "duskos",
@@ -1195,6 +1168,7 @@
                 cdrom: {
                     url: host + "nanoshell.iso",
                     size: 6785024,
+                    async: false,
                 },
                 homepage: "https://github.com/iProgramMC/NanoShellOS",
             },
@@ -1204,6 +1178,7 @@
                 cdrom: {
                     url: host + "catkernel.iso",
                     size: 11968512,
+                    async: false,
                 },
                 homepage: "https://catk.neocities.org/",
             },
@@ -1224,12 +1199,71 @@
                     size: 368640,
                 },
             },
+            {
+                id: "leetos",
+                name: "lEEt/OS",
+                fda: {
+                    url: host + "leetos.img",
+                    size: 1474560,
+                },
+                homepage: "http://sininenankka.dy.fi/leetos/index.php",
+            },
+            {
+                id: "newos",
+                name: "NewOS",
+                fda: {
+                    url: host + "newos-flp.img",
+                    size: 1474560,
+                    async: false,
+                },
+                homepage: "https://newos.org/",
+            },
+            {
+                id: "aros-broadway",
+                name: "AROS Broadway",
+                memory_size: 512 * 1024 * 1024,
+                cdrom: {
+                    url: host + "broadway10/.iso",
+                    size: 742051840,
+                    async: true,
+                    fixed_chunk_size: 512 * 1024,
+                    use_parts: true,
+                },
+                homepage: "https://web.archive.org/web/20231109224346/http://www.aros-broadway.de/",
+            },
+            {
+                id: "icaros",
+                name: "Icaros Desktop",
+                memory_size: 512 * 1024 * 1024,
+                cdrom: {
+                    url: host + "icaros-pc-i386-2.3/.iso",
+                    size: 726511616,
+                    async: true,
+                    // NOTE: needs 136MB/287 requests to boot, maybe state image or zst parts?
+                    fixed_chunk_size: 512 * 1024,
+                    use_parts: true,
+                },
+                homepage: "http://vmwaros.blogspot.com/",
+            },
+            {
+                id: "tinyaros",
+                name: "Tiny Aros",
+                memory_size: 512 * 1024 * 1024,
+                cdrom: {
+                    url: host + "tinyaros-pc-i386/.iso",
+                    size: 111175680,
+                    async: true,
+                    fixed_chunk_size: 512 * 1024,
+                    use_parts: true,
+                },
+                homepage: "https://www.tinyaros.it/",
+            },
         ];
 
         if(DEBUG)
         {
             // see tests/kvm-unit-tests/x86/
-            var tests = [
+            const tests = [
                 "realmode",
                 // All tests below require an APIC
                 "cmpxchg8b",
@@ -1262,7 +1296,7 @@
             }
         }
 
-        var profile = query_args["profile"];
+        const profile = query_args.get("profile");
 
         if(!profile && !DEBUG)
         {
@@ -1277,92 +1311,43 @@
         link.href = "build/xterm.js";
         document.head.appendChild(link);
 
-        if(query_args["disable_jit"])
+        for(const os of oses)
         {
-            settings.disable_jit = true;
-        }
-
-        if(query_args["use_bochs_bios"])
-        {
-            settings.use_bochs_bios = true;
-        }
-
-        const m = parseInt(query_args["m"], 10);
-        if(m > 0)
-        {
-            settings.memory_size = Math.max(16, m) * 1024 * 1024;
-        }
-
-        const vram = parseInt(query_args["vram"], 10);
-        if(vram > 0)
-        {
-            settings.vga_memory_size = vram * 1024 * 1024;
-        }
-
-        settings.networking_proxy = query_args["networking_proxy"];
-        settings.audio = query_args["audio"] !== "0";
-        settings.acpi = query_args["acpi"];
-
-        for(var i = 0; i < oses.length; i++)
-        {
-            var infos = oses[i];
-
-            if(profile === infos.id)
+            if(profile === os.id)
             {
-                start_profile(infos);
+                start_emulation(os, query_args);
                 return;
             }
 
-            var element = $("start_" + infos.id);
+            const element = $("start_" + os.id);
 
             if(element)
             {
-                element.onclick = function(infos, element, e)
+                element.onclick = e =>
                 {
                     e.preventDefault();
-                    set_profile(infos.id);
                     element.blur();
-
-                    start_profile(infos);
-                }.bind(this, infos, element);
+                    start_emulation(os, null);
+                };
             }
         }
 
         if(profile === "custom")
         {
-            if(query_args["hda.url"])
+            // TODO: if one of the file form fields has a value (firefox), start here?
+
+            if(query_args.has("hda.url") || query_args.has("cdrom.url") || query_args.has("fda.url"))
             {
-                settings.hda = {
-                    size: parseInt(query_args["hda.size"], 10) || undefined,
-                    url: query_args["hda.url"],
-                    async: true,
-                };
+                start_emulation(null, query_args);
             }
-
-            if(query_args["cdrom.url"])
+            else
             {
-                settings.cdrom = {
-                    size: parseInt(query_args["cdrom.size"], 10) || undefined,
-                    url: query_args["cdrom.url"],
-                    async: true,
-                };
-            }
-
-            if(query_args["fda.url"])
-            {
-                settings.fda = {
-                    size: parseInt(query_args["fda.size"], 10) || undefined,
-                    url: query_args["fda.url"],
-                    async: false,
-                };
-            }
-
-            if(settings.fda || settings.cdrom || settings.hda)
-            {
-                $("boot_options").style.display = "none";
-
-                start_emulation(settings, done);
-                return;
+                if(query_args.has("m")) $("memory_size").value = query_args.get("m");
+                if(query_args.has("vram")) $("vga_memory_size").value = query_args.get("vram");
+                if(query_args.has("relay_url")) $("relay_url").value = query_args.get("relay_url");
+                if(query_args.has("mute")) $("disable_audio").checked = bool_arg(query_args.get("mute"));
+                if(query_args.has("acpi")) $("acpi").checked = bool_arg(query_args.get("acpi"));
+                if(query_args.has("boot_order")) $("boot_order").value = query_args.get("boot_order");
             }
         }
         else if(/^[a-zA-Z0-9\-_]+\/[a-zA-Z0-9\-_]+$/g.test(profile))
@@ -1380,7 +1365,7 @@
                         return o && { url: base + "/" + o["url"], async: o["async"], size: o["size"] };
                     }
 
-                    start_profile({
+                    const profile = {
                         id: p["id"],
                         name: p["name"],
                         memory_size: p["memory_size"],
@@ -1393,124 +1378,10 @@
                         multiboot: handle_image(p["multiboot"]),
                         bzimage: handle_image(p["bzimage"]),
                         initrd: handle_image(p["initrd"]),
-                    });
+                    };
+
+                    start_emulation(profile, query_args);
                 });
-
-            return;
-        }
-
-        for(const id of elements_to_restore)
-        {
-            const saved_value = window.localStorage.getItem(id);
-
-            if(saved_value)
-            {
-                const element = $(id);
-                if(element)
-                {
-                    if(element.type === "checkbox")
-                    {
-                        element.checked = saved_value === "true" ? true : false;
-                    }
-                    else
-                    {
-                        element.value = saved_value;
-                    }
-                }
-            }
-        }
-
-        if(DEBUG && ON_LOCALHOST)
-        {
-            // don't use online relay in debug mode
-            $("networking_proxy").value = "ws://localhost:8080/";
-        }
-
-        function start_profile(infos)
-        {
-            $("boot_options").style.display = "none";
-            set_title(infos.name);
-
-            settings.filesystem = infos.filesystem;
-
-            if(infos.state)
-            {
-                $("reset").style.display = "none";
-                settings.initial_state = infos.state;
-            }
-
-            settings.fda = infos.fda;
-            settings.cdrom = infos.cdrom;
-            settings.hda = infos.hda;
-            settings.multiboot = infos.multiboot;
-            settings.bzimage = infos.bzimage;
-            settings.initrd = infos.initrd;
-            settings.cmdline = infos.cmdline;
-            settings.bzimage_initrd_from_filesystem = infos.bzimage_initrd_from_filesystem;
-            settings.mac_address_translation = infos.mac_address_translation;
-            settings.cpuid_level = infos.cpuid_level;
-
-            settings.acpi = (!infos.state && settings.acpi !== undefined) ? settings.acpi : infos.acpi;
-            settings.memory_size = (!infos.state && settings.memory_size) ? settings.memory_size : infos.memory_size;
-            settings.vga_memory_size = (!infos.state && settings.vga_memory_size) ? settings.vga_memory_size : infos.vga_memory_size;
-
-            settings.disable_vga_display = infos.disable_vga_display;
-
-            settings.id = infos.id;
-
-            if(infos.boot_order !== undefined)
-            {
-                settings.boot_order = infos.boot_order;
-            }
-
-            let chunk_size = parseInt(query_args["chunk_size"], 10);
-            if(chunk_size >= 0)
-            {
-                if(chunk_size)
-                {
-                    chunk_size = Math.min(4 * 1024 * 1024, Math.max(512, chunk_size));
-                    chunk_size = 1 << Math.ceil(Math.log2(chunk_size));
-                }
-                else
-                {
-                    chunk_size = undefined;
-                }
-
-                if(settings.hda)
-                {
-                    settings.hda.fixed_chunk_size = chunk_size;
-                }
-
-                if(settings.cdrom)
-                {
-                    settings.cdrom.fixed_chunk_size = chunk_size;
-                }
-            }
-
-            if(!DEBUG && infos.homepage)
-            {
-                $("description").style.display = "block";
-                const link = document.createElement("a");
-                link.href = infos.homepage;
-                link.textContent = infos.name;
-                link.target = "_blank";
-                $("description").appendChild(document.createTextNode("Running "));
-                $("description").appendChild(link);
-            }
-
-            start_emulation(settings, done);
-        }
-
-        function done(emulator)
-        {
-            if(query_args["c"])
-            {
-                setTimeout(function()
-                {
-                    //emulator.serial0_send(query_args["c"] + "\n");
-                    emulator.keyboard_send_text(query_args["c"] + "\n");
-                }, 25);
-            }
         }
     }
 
@@ -1518,58 +1389,59 @@
     {
         // called on window.onload, in debug mode
 
-        var log_levels = $("log_levels");
+        const log_levels = $("log_levels");
 
-        if(log_levels)
+        if(!log_levels)
         {
-            for(var i = 0; i < LOG_NAMES.length; i++)
+            return;
+        }
+
+        for(let i = 0; i < LOG_NAMES.length; i++)
+        {
+            const mask = LOG_NAMES[i][0];
+
+            if(mask === 1)
+                continue;
+
+            const name = LOG_NAMES[i][1].toLowerCase();
+            const input = document.createElement("input");
+            const label = document.createElement("label");
+
+            input.type = "checkbox";
+
+            label.htmlFor = input.id = "log_" + name;
+
+            if(LOG_LEVEL & mask)
             {
-                var mask = LOG_NAMES[i][0];
+                input.checked = true;
+            }
+            input.mask = mask;
 
-                if(mask === 1)
-                    continue;
+            label.append(input, v86util.pads(name, 4) + " ");
+            log_levels.appendChild(label);
 
-                var name = LOG_NAMES[i][1].toLowerCase(),
-                    input = document.createElement("input"),
-                    label = document.createElement("label");
+            if(i === Math.floor(LOG_NAMES.length / 2))
+            {
+                log_levels.append("\n");
+            }
+        }
 
-                input.type = "checkbox";
+        log_levels.onchange = function(e)
+        {
+            const target = e.target;
+            const mask = target.mask;
 
-                label.htmlFor = input.id = "log_" + name;
-
-                if(LOG_LEVEL & mask)
-                {
-                    input.checked = true;
-                }
-                input.mask = mask;
-
-                label.appendChild(input);
-                label.appendChild(document.createTextNode(v86util.pads(name, 4) + " "));
-                log_levels.appendChild(label);
-
-                if(i === Math.floor(LOG_NAMES.length / 2))
-                {
-                    log_levels.appendChild(document.createTextNode("\n"));
-                }
+            if(target.checked)
+            {
+                LOG_LEVEL |= mask;
+            }
+            else
+            {
+                LOG_LEVEL &= ~mask;
             }
 
-            log_levels.onchange = function(e)
-            {
-                var target = e.target,
-                    mask = target.mask;
-
-                if(target.checked)
-                {
-                    LOG_LEVEL |= mask;
-                }
-                else
-                {
-                    LOG_LEVEL &= ~mask;
-                }
-
-                target.blur();
-            };
-        }
+            target.blur();
+        };
     }
 
     window.addEventListener("load", onload, false);
@@ -1590,145 +1462,274 @@
         onload();
     }
 
-    /** @param {?=} done */
-    function start_emulation(settings, done)
+    // we can get here in various ways:
+    // - the user clicked on the "start emulation"
+    // - the user clicked on a profile
+    // - the ?profile= query parameter specified a valid profile
+    // - the ?profile= query parameter was set to "custom" and at least one disk image was given
+    function start_emulation(profile, query_args)
     {
-        /** @const */
-        var MB = 1024 * 1024;
+        $("boot_options").style.display = "none";
 
-        var memory_size = settings.memory_size;
+        const new_query_args = new URLSearchParams({ "profile": profile?.id || "custom" });
 
-        if(!memory_size)
+        const settings = {};
+
+        if(profile)
         {
-            memory_size = parseInt($("memory_size").value, 10) * MB;
-
-            if(!memory_size)
+            if(profile.state)
             {
-                alert("Invalid memory size - reset to 128MB");
-                memory_size = 128 * MB;
+                $("reset").style.display = "none";
+            }
+
+            set_title(profile.name);
+
+            settings.initial_state = profile.state;
+            settings.filesystem = profile.filesystem;
+            settings.fda = profile.fda;
+            settings.cdrom = profile.cdrom;
+            settings.hda = profile.hda;
+            settings.multiboot = profile.multiboot;
+            settings.bzimage = profile.bzimage;
+            settings.initrd = profile.initrd;
+            settings.cmdline = profile.cmdline;
+            settings.bzimage_initrd_from_filesystem = profile.bzimage_initrd_from_filesystem;
+            settings.mac_address_translation = profile.mac_address_translation;
+            settings.cpuid_level = profile.cpuid_level;
+            settings.acpi = profile.acpi;
+            settings.memory_size = profile.memory_size;
+            settings.vga_memory_size = profile.vga_memory_size;
+            settings.boot_order = profile.boot_order;
+            settings.net_device_type = profile.net_device_type;
+
+            if(!DEBUG && profile.homepage)
+            {
+                $("description").style.display = "block";
+                const link = document.createElement("a");
+                link.href = profile.homepage;
+                link.textContent = profile.name;
+                link.target = "_blank";
+                $("description").append(document.createTextNode("Running "), link);
             }
         }
 
-        var vga_memory_size = settings.vga_memory_size;
-
-        if(!vga_memory_size)
+        if(query_args)
         {
-            vga_memory_size = parseInt($("video_memory_size").value, 10) * MB;
-
-            if(!vga_memory_size)
+            // ignore certain settings when using a state image
+            if(!settings.initial_state)
             {
-                alert("Invalid video memory size - reset to 8MB");
-                vga_memory_size = 8 * MB;
+                let chunk_size = parseInt(query_args.get("chunk_size"), 10);
+                if(chunk_size >= 0)
+                {
+                    chunk_size = Math.min(4 * 1024 * 1024, Math.max(512, chunk_size));
+                    chunk_size = v86util.round_up_to_next_power_of_2(chunk_size);
+                }
+                else
+                {
+                    chunk_size = 256 * 1024;
+                }
+
+                if(query_args.has("hda.url"))
+                {
+                    settings.hda = {
+                        size: parseInt(query_args.get("hda.size"), 10) || undefined,
+                        // TODO: synchronous if small?
+                        url: query_args.get("hda.url"),
+                        fixed_chunk_size: chunk_size,
+                        async: true,
+                    };
+                }
+
+                if(query_args.has("cdrom.url"))
+                {
+                    settings.cdrom = {
+                        size: parseInt(query_args.get("cdrom.size"), 10) || undefined,
+                        url: query_args.get("cdrom.url"),
+                        fixed_chunk_size: chunk_size,
+                        async: true,
+                    };
+                }
+
+                if(query_args.has("fda.url"))
+                {
+                    settings.fda = {
+                        size: parseInt(query_args.get("fda.size"), 10) || undefined,
+                        url: query_args.get("fda.url"),
+                        async: false,
+                    };
+                }
+
+                const m = parseInt(query_args.get("m"), 10);
+                if(m > 0)
+                {
+                    settings.memory_size = Math.max(16, m) * 1024 * 1024;
+                }
+
+                const vram = parseInt(query_args.get("vram"), 10);
+                if(vram > 0)
+                {
+                    settings.vga_memory_size = vram * 1024 * 1024;
+                }
+
+                settings.acpi = query_args.has("acpi") ? bool_arg(query_args.get("acpi")) : undefined;
+                settings.use_bochs_bios = query_args.get("bios") === "bochs";
+                settings.net_device_type = query_args.get("net_device_type") === "virtio" ? "virtio" : "ne2k";
             }
+
+            settings.relay_url = query_args.get("relay_url");
+            settings.disable_jit = bool_arg(query_args.get("disable_jit"));
+            settings.disable_audio = bool_arg(query_args.get("mute"));
         }
 
-        if(!settings.bios)
+        if(!settings.relay_url)
         {
-            var bios = $("bios").files[0];
+            settings.relay_url = $("relay_url").value;
+            if(!DEFAULT_NETWORKING_PROXIES.includes(settings.relay_url)) new_query_args.append("relay_url", settings.relay_url);
+        }
+        settings.disable_audio = $("disable_audio").checked || settings.disable_audio;
+        if(settings.disable_audio) new_query_args.append("mute", "1");
+
+        // some settings cannot be overridden when a state image is used
+        if(!settings.initial_state)
+        {
+            const bios = $("bios").files[0];
             if(bios)
             {
                 settings.bios = { buffer: bios };
             }
-        }
-
-        if(!settings.fda)
-        {
-            var floppy_file = $("floppy_image").files[0];
-            if(floppy_file)
+            const fda = $("floppy_image").files[0];
+            if(fda)
             {
-                settings.fda = { buffer: floppy_file };
+                settings.fda = { buffer: fda };
             }
-        }
-
-        if(!settings.bzimage)
-        {
-            var bzimage = $("bzimage").files[0];
+            const cdrom = $("cdrom_image").files[0];
+            if(cdrom)
+            {
+                settings.cdrom = { buffer: cdrom };
+            }
+            const hda = $("hda_image").files[0];
+            if(hda)
+            {
+                settings.hda = { buffer: hda };
+            }
+            const hdb = $("hdb_image")?.files[0];
+            if(hdb)
+            {
+                settings.hdb = { buffer: hdb };
+            }
+            const multiboot = $("multiboot_image")?.files[0];
+            if(multiboot)
+            {
+                settings.multiboot = { buffer: multiboot };
+            }
+            const bzimage = $("bzimage").files[0];
             if(bzimage)
             {
                 settings.bzimage = { buffer: bzimage };
             }
-        }
-
-        if(!settings.initrd)
-        {
-            var initrd = $("initrd").files[0];
+            const initrd = $("initrd").files[0];
             if(initrd)
             {
                 settings.initrd = { buffer: initrd };
             }
+
+            const title = multiboot?.name || hda?.name || cdrom?.name || hdb?.name || fda?.name || bios?.name;
+            if(title)
+            {
+                set_title(title);
+            }
+
+            const MB = 1024 * 1024;
+
+            const memory_size = parseInt($("memory_size").value, 10) || DEFAULT_MEMORY_SIZE;
+            if(!settings.memory_size || memory_size !== DEFAULT_MEMORY_SIZE)
+            {
+                settings.memory_size = memory_size * MB;
+            }
+            if(memory_size !== DEFAULT_MEMORY_SIZE) new_query_args.append("m", String(memory_size));
+
+            const vga_memory_size = parseInt($("vga_memory_size").value, 10) || DEFAULT_VGA_MEMORY_SIZE;
+            if(!settings.vga_memory_size || vga_memory_size !== DEFAULT_VGA_MEMORY_SIZE)
+            {
+                settings.vga_memory_size = vga_memory_size * MB;
+            }
+            if(vga_memory_size !== DEFAULT_VGA_MEMORY_SIZE) new_query_args.append("vram", String(vga_memory_size));
+
+            const boot_order = parseInt($("boot_order").value, 16) || DEFAULT_BOOT_ORDER;
+            if(!settings.boot_order || boot_order !== DEFAULT_BOOT_ORDER)
+            {
+                settings.boot_order = boot_order;
+            }
+            if(settings.boot_order !== DEFAULT_BOOT_ORDER) new_query_args.append("boot_order", String(settings.boot_order));
+
+            if(settings.acpi === undefined)
+            {
+                settings.acpi = $("acpi").checked;
+                if(settings.acpi) new_query_args.append("acpi", "1");
+            }
+
+            if(!settings.bios)
+            {
+                const BIOSPATH = "bios/";
+
+                if(settings.use_bochs_bios)
+                {
+                    var biosfile = "bochs-bios.bin";
+                    var vgabiosfile = "bochs-vgabios.bin";
+                }
+                else
+                {
+                    var biosfile = DEBUG ? "seabios-debug.bin" : "seabios.bin";
+                    var vgabiosfile = DEBUG ? "vgabios-debug.bin" : "vgabios.bin";
+                }
+
+                settings.bios = { url: BIOSPATH + biosfile };
+                settings.vga_bios = { url: BIOSPATH + vgabiosfile };
+            }
         }
 
-        const networking_proxy = settings.networking_proxy === undefined ? $("networking_proxy").value : settings.networking_proxy;
-        const disable_audio = $("disable_audio").checked || !settings.audio;
-        const enable_acpi = !settings.initial_state && settings.acpi === undefined ? $("enable_acpi").checked : settings.acpi;
-
-        /** @const */
-        var BIOSPATH = "bios/";
-
-        if(settings.use_bochs_bios)
+        if(!query_args)
         {
-            var biosfile = "bochs-bios.bin";
-            var vgabiosfile = "bochs-vgabios.bin";
-        }
-        else
-        {
-            var biosfile = DEBUG ? "seabios-debug.bin" : "seabios.bin";
-            var vgabiosfile = DEBUG ? "vgabios-debug.bin" : "vgabios.bin";
+            push_state(new_query_args);
         }
 
-        var bios;
-        var vga_bios;
-
-        // a bios is only needed if the machine is booted
-        if(!settings.initial_state)
-        {
-            bios = {
-                url: BIOSPATH + biosfile,
-            };
-            vga_bios = {
-                url: BIOSPATH + vgabiosfile,
-            };
-        }
-
-        var emulator = new V86({
-            memory_size: memory_size,
-            vga_memory_size: vga_memory_size,
-
-            screen_container: settings.disable_vga_display ? null : $("screen_container"),
-
-            boot_order: settings.boot_order || parseInt($("boot_order").value, 16) || 0,
-
-            net_device: {
-                type: "ne2k",
-                relay_url: networking_proxy,
+        const emulator = new V86({
+            screen: {
+                container: $("screen_container"),
+                use_graphical_text: false,
             },
+            net_device: {
+                type: settings.net_device_type || "ne2k",
+                relay_url: settings.relay_url,
+            },
+            autostart: true,
 
-            bios: settings.bios || bios,
-            vga_bios: settings.bios ? null : vga_bios,
+            memory_size: settings.memory_size,
+            vga_memory_size: settings.vga_memory_size,
+            boot_order: settings.boot_order,
 
+            bios: settings.bios,
+            vga_bios: settings.vga_bios,
             fda: settings.fda,
             hda: settings.hda,
             hdb: settings.hdb,
             cdrom: settings.cdrom,
-
             multiboot: settings.multiboot,
             bzimage: settings.bzimage,
             initrd: settings.initrd,
+
             cmdline: settings.cmdline,
             bzimage_initrd_from_filesystem: settings.bzimage_initrd_from_filesystem,
-
-            acpi: enable_acpi,
+            acpi: settings.acpi,
             disable_jit: settings.disable_jit,
             initial_state: settings.initial_state,
             filesystem: settings.filesystem || {},
-            disable_speaker: disable_audio,
+            disable_speaker: settings.disable_audio,
             mac_address_translation: settings.mac_address_translation,
             cpuid_level: settings.cpuid_level,
-
-            autostart: true,
         });
 
-        if(DEBUG) window["emulator"] = emulator;
+        if(DEBUG) window.emulator = emulator;
 
         emulator.add_listener("emulator-ready", function()
         {
@@ -1741,7 +1742,7 @@
             {
                 const CLEAR_STATS = false;
 
-                var panel = document.createElement("pre");
+                const panel = document.createElement("pre");
                 document.body.appendChild(panel);
 
                 setInterval(function()
@@ -1758,7 +1759,7 @@
                     }, CLEAR_STATS ? 5000 : 1000);
             }
 
-            if(settings.id === "dsl" || settings.id === "helenos" || settings.id === "android" || settings.id === "android4")
+            if(["dsl", "helenos", "android", "android4"].includes(profile?.id))
             {
                 setTimeout(() => {
                     // hack: Start automatically
@@ -1768,7 +1769,21 @@
 
             init_ui(settings, emulator);
 
-            done && done(emulator);
+            if(query_args?.has("c"))
+            {
+                setTimeout(function()
+                {
+                    emulator.keyboard_send_text(query_args.get("c") + "\n");
+                }, 25);
+            }
+
+            if(query_args?.has("s"))
+            {
+                setTimeout(function()
+                {
+                    emulator.serial0_send(query_args.get("s") + "\n");
+                }, 25);
+            }
         });
 
         emulator.add_listener("download-progress", function(e)
@@ -1778,10 +1793,9 @@
 
         emulator.add_listener("download-error", function(e)
         {
-            var el = $("loading");
+            const el = $("loading");
             el.style.display = "block";
-            el.textContent = "Loading " + e.file_name + " failed. Check your connection " +
-                             "and reload the page to try again.";
+            el.textContent = `Loading ${e.file_name} failed. Check your connection and reload the page to try again.`;
         });
     }
 
@@ -1791,11 +1805,10 @@
      */
     function init_ui(settings, emulator)
     {
-        $("boot_options").style.display = "none";
         $("loading").style.display = "none";
         $("runtime_options").style.display = "block";
         $("runtime_infos").style.display = "block";
-        if(!settings.disable_vga_display) $("screen_container").style.display = "block";
+        $("screen_container").style.display = "block";
 
         if(settings.filesystem)
         {
@@ -1852,7 +1865,6 @@
             $("toggle_mouse").value = (mouse_is_enabled ? "Dis" : "En") + "able mouse";
             $("toggle_mouse").blur();
         };
-
 
         var last_tick = 0;
         var running_time = 0;
@@ -2448,7 +2460,6 @@
         }, 1000);
 
         // helps debugging
-        window.emulator = emulator;
         window.cpu = cpu;
         window.dump_file = dump_file;
     }
@@ -2458,11 +2469,12 @@
         location.reload();
     }
 
-    function set_profile(prof)
+    function push_state(params)
     {
         if(window.history.pushState)
         {
-            window.history.pushState({ profile: prof }, "", "?profile=" + prof);
+            const search = "?" + params.toString();
+            window.history.pushState({ search }, "", search);
         }
     }
 

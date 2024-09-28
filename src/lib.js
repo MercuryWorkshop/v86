@@ -157,22 +157,8 @@ else
 
 (function()
 {
-    if(typeof Math.clz32 === "function" && Math.clz32(0) === 32 &&
-       Math.clz32(0x12345) === 15 && Math.clz32(-1) === 0)
+    if(typeof Math.clz32 === "function" && Math.clz32(0) === 32 && Math.clz32(0x12345) === 15 && Math.clz32(-1) === 0)
     {
-        /**
-         * calculate the integer logarithm base 2 of a byte
-         * @param {number} x
-         * @return {number}
-         */
-        v86util.int_log2_byte = function(x)
-        {
-            dbg_assert(x > 0);
-            dbg_assert(x < 0x100);
-
-            return 31 - Math.clz32(x);
-        };
-
         /**
          * calculate the integer logarithm base 2
          * @param {number} x
@@ -197,19 +183,6 @@ else
 
         int_log2_table[i] = b;
     }
-
-    /**
-     * calculate the integer logarithm base 2 of a byte
-     * @param {number} x
-     * @return {number}
-     */
-    v86util.int_log2_byte = function(x)
-    {
-        dbg_assert(x > 0);
-        dbg_assert(x < 0x100);
-
-        return int_log2_table[x];
-    };
 
     /**
      * calculate the integer logarithm base 2
@@ -251,6 +224,27 @@ else
     };
 })();
 
+v86util.round_up_to_next_power_of_2 = function(x)
+{
+    dbg_assert(x >= 0);
+    return x <= 1 ? 1 : 1 << 1 + v86util.int_log2(x - 1);
+};
+
+if(DEBUG)
+{
+    dbg_assert(v86util.int_log2(1) === 0);
+    dbg_assert(v86util.int_log2(2) === 1);
+    dbg_assert(v86util.int_log2(7) === 2);
+    dbg_assert(v86util.int_log2(8) === 3);
+    dbg_assert(v86util.int_log2(123456789) === 26);
+
+    dbg_assert(v86util.round_up_to_next_power_of_2(0) === 1);
+    dbg_assert(v86util.round_up_to_next_power_of_2(1) === 1);
+    dbg_assert(v86util.round_up_to_next_power_of_2(2) === 2);
+    dbg_assert(v86util.round_up_to_next_power_of_2(7) === 8);
+    dbg_assert(v86util.round_up_to_next_power_of_2(8) === 8);
+    dbg_assert(v86util.round_up_to_next_power_of_2(123456789) === 134217728);
+}
 
 /**
  * @constructor
