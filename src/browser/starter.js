@@ -58,7 +58,7 @@
  *
  * - `screen Object` (No screen) - An object with the following properties:
  *   - `container HTMLElement` - An HTMLElement, see above.
- *   - `disable_autoscale boolean` (false) - Disable automatic scaling of small resolutions.
+ *   - `scale` (1) - Set initial scale_x and scale_y, if 0 disable automatic upscaling and dpi-adaption
  *
  * ***
  *
@@ -101,7 +101,7 @@
       disable_keyboard: (boolean|undefined),
       wasm_fn: (Function|undefined),
       screen: ({
-          disable_autoscale: (boolean|undefined),
+          scale: (number|undefined),
       } | undefined),
     }} options
  * @constructor
@@ -313,11 +313,11 @@ V86.prototype.continue_init = async function(emulator, options)
         // TODO: remove bus, use direct calls instead
         if(relay_url === "fetch")
         {
-            this.network_adapter = new FetchNetworkAdapter(this.bus);
+            this.network_adapter = new FetchNetworkAdapter(this.bus, options.net_device);
         }
         else if(relay_url.startsWith("wisp://") || relay_url.startsWith("wisps://"))
         {
-            this.network_adapter = new WispNetworkAdapter(relay_url, this.bus, options);
+            this.network_adapter = new WispNetworkAdapter(relay_url, this.bus, options.net_device);
         }
         else
         {
@@ -1389,7 +1389,7 @@ V86.prototype.wait_until_vga_screen_contains = function(text)
         function put_char(args)
         {
             const [row, col, char] = args;
-            changed_rows.add(col);
+            changed_rows.add(row);
         }
 
         const check = () =>

@@ -11,7 +11,7 @@
 
     function set_title(text)
     {
-        document.title = text + " - Virtual x86" +  (DEBUG ? " - debug" : "");
+        document.title = text + " - v86" +  (DEBUG ? " - debug" : "");
         const description = document.querySelector("meta[name=description]");
         description && (description.content = "Running " + text);
     }
@@ -145,7 +145,7 @@
                 name: "Arch Linux",
                 memory_size: 512 * 1024 * 1024,
                 vga_memory_size: 8 * 1024 * 1024,
-                state: { url: host + "arch_state.bin.zst" },
+                state: { url: host + "arch_state-v2.bin.zst" },
                 filesystem: {
                     baseurl: host + "arch/",
                 },
@@ -217,14 +217,14 @@
                 id: "redox",
                 name: "Redox",
                 hda: {
-                    url: host + "redox_demo_i686_2022-11-26_643_harddrive/.img",
-                    size: 512 * 1024 * 1024,
+                    url: host + "redox_demo_i686_2024-09-07_1225_harddrive/.img",
+                    size: 671088640,
                     async: true,
                     fixed_chunk_size: 1024 * 1024,
                     use_parts: true,
                 },
-                memory_size: 512 * 1024 * 1024,
-                state: { url: host + "redox_state.bin.zst" },
+                memory_size: 1024 * 1024 * 1024,
+                state: { url: host + "redox_state-v2.bin.zst" },
                 homepage: "https://www.redox-os.org/",
                 acpi: true,
             },
@@ -232,13 +232,13 @@
                 id: "redox-boot",
                 name: "Redox",
                 hda: {
-                    url: host + "redox_demo_i686_2022-11-26_643_harddrive/.img",
-                    size: 512 * 1024 * 1024,
+                    url: host + "redox_demo_i686_2024-09-07_1225_harddrive/.img",
+                    size: 671088640,
                     async: true,
                     fixed_chunk_size: 1024 * 1024,
                     use_parts: true,
                 },
-                memory_size: 512 * 1024 * 1024,
+                memory_size: 1024 * 1024 * 1024,
                 homepage: "https://www.redox-os.org/",
                 acpi: true,
             },
@@ -259,7 +259,7 @@
                 id: "fiwix",
                 memory_size: 256 * 1024 * 1024,
                 hda: {
-                    url: host + "FiwixOS-3.3-i386/.img",
+                    url: host + "FiwixOS-3.4-i386/.img",
                     size: 1024 * 1024 * 1024,
                     async: true,
                     fixed_chunk_size: 1024 * 1024,
@@ -272,13 +272,13 @@
                 id: "haiku",
                 memory_size: 512 * 1024 * 1024,
                 hda: {
-                    url: host + "haiku-v3/.img",
+                    url: host + "haiku-v4/.img",
                     size: 1 * 1024 * 1024 * 1024,
                     async: true,
                     fixed_chunk_size: 1024 * 1024,
                     use_parts: true,
                 },
-                state: { url: host + "haiku_state-v3.bin.zst" },
+                state: { url: host + "haiku_state-v4.bin.zst" },
                 name: "Haiku",
                 homepage: "https://www.haiku-os.org/",
             },
@@ -286,7 +286,7 @@
                 id: "haiku-boot",
                 memory_size: 512 * 1024 * 1024,
                 hda: {
-                    url: host + "haiku-v3/.img",
+                    url: host + "haiku-v4/.img",
                     size: 1 * 1024 * 1024 * 1024,
                     async: true,
                     fixed_chunk_size: 1024 * 1024,
@@ -296,13 +296,35 @@
                 homepage: "https://www.haiku-os.org/",
             },
             {
+                id: "beos",
+                memory_size: 512 * 1024 * 1024,
+                hda: {
+                    url: host + "beos5/.img",
+                    size: 536870912,
+                    async: true,
+                    fixed_chunk_size: 1024 * 1024,
+                    use_parts: true,
+                },
+                name: "BeOS 5",
+            },
+            {
                 id: "msdos",
                 hda: {
-                    url: host + "msdos.img",
-                    size: 8 * 1024 * 1024,
-                    async: false,
+                    url: host + "msdos622/.img",
+                    size: 64 * 1024 * 1024,
+                    async: true,
+                    fixed_chunk_size: 256 * 1024,
+                    use_parts: true,
                 },
-                name: "MS-DOS",
+                name: "MS-DOS 6.22",
+            },
+            {
+                id: "msdos4",
+                fda: {
+                    url: host + "msdos4.img",
+                    size: 1474560,
+                },
+                name: "MS-DOS 4",
             },
             {
                 id: "freedos",
@@ -322,6 +344,15 @@
                     use_parts: true,
                 },
                 name: "Freedos with FreeGEM",
+            },
+            {
+                id: "xcom",
+                fda: {
+                    url: host + "xcom144.img",
+                    size: 1440 * 1024,
+                },
+                name: "Freedos with Xcom",
+                homepage: "http://xcom.infora.hu/index.html",
             },
             {
                 id: "psychdos",
@@ -359,7 +390,7 @@
                     url: host + "windows101.img",
                     size: 1474560,
                 },
-                name: "Windows",
+                name: "Windows 1.01",
             },
             {
                 id: "windows2",
@@ -416,7 +447,7 @@
                     size: 10068480,
                     async: false,
                 },
-                name: "Buildroot Linux",
+                name: "Buildroot Linux 6.8",
                 filesystem: {},
                 cmdline: "tsc=reliable mitigations=off random.trust_cpu=on",
             },
@@ -447,6 +478,7 @@
                     async: false,
                 },
                 name: "ELKS",
+                homepage: "https://github.com/ghaerr/elks",
             },
             {
                 id: "nodeos",
@@ -492,6 +524,17 @@
                     use_parts: true,
                 },
                 homepage: "https://www.minix3.org/",
+            },
+            {
+                id: "unix-v7",
+                name: "Unix V7",
+                hda: {
+                    url: host + "unix-v7x86-0.8a/.img",
+                    size: 152764416,
+                    async: true,
+                    fixed_chunk_size: 256 * 1024,
+                    use_parts: true,
+                },
             },
             {
                 id: "kolibrios",
@@ -625,6 +668,15 @@
                 homepage: "https://github.com/nanochess/bootLogo",
             },
             {
+                id: "pillman",
+                fda: {
+                    url: host + "pillman.img",
+                    size: 512,
+                },
+                name: "Pillman",
+                homepage: "https://github.com/nanochess/Pillman",
+            },
+            {
                 id: "sectorlisp",
                 fda: {
                     url: host + "sectorlisp-friendly.bin",
@@ -730,6 +782,19 @@
                     use_parts: true,
                 },
                 name: "Windows 2000",
+            },
+            {
+                id: "windows-me",
+                memory_size: 128 * 1024 * 1024,
+                hda: {
+                    url: host + "windowsme/.img",
+                    size: 834666496,
+                    async: true,
+                    fixed_chunk_size: 256 * 1024,
+                    use_parts: true,
+                },
+                state: { url: host + "windows-me_state.bin.zst" },
+                name: "Windows ME",
             },
             {
                 id: "windowsnt4",
@@ -848,6 +913,16 @@
                 homepage: "https://github.com/vvaltchev/tilck",
             },
             {
+                id: "littlekernel",
+                multiboot: {
+                    url: host + "littlekernel-multiboot.img",
+                    async: false,
+                    size: 969580,
+                },
+                name: "Little Kernel",
+                homepage: "https://github.com/littlekernel/lk",
+            },
+            {
                 id: "sanos",
                 memory_size: 128 * 1024 * 1024,
                 hda: {
@@ -855,7 +930,7 @@
                     async: false,
                     size: 1474560,
                 },
-                name: "sanos",
+                name: "Sanos",
                 homepage: "http://www.jbox.dk/sanos/",
             },
             {
@@ -887,28 +962,30 @@
                 id: "reactos",
                 memory_size: 512 * 1024 * 1024,
                 hda: {
-                    url: host + "reactos/.img",
-                    size: 500 * 1024 * 1024,
+                    url: host + "reactos-v2/.img",
+                    size: 681574400,
                     async: true,
                     fixed_chunk_size: 1024 * 1024,
                     use_parts: true,
                 },
-                state: { url: host + "reactos_state.bin.zst" },
+                state: { url: host + "reactos_state-v2.bin.zst" },
                 mac_address_translation: true,
                 name: "ReactOS",
+                acpi: true,
                 homepage: "https://reactos.org/",
             },
             {
                 id: "reactos-boot",
                 memory_size: 512 * 1024 * 1024,
                 hda: {
-                    url: host + "reactos/.img",
-                    size: 500 * 1024 * 1024,
+                    url: host + "reactos-v2/.img",
+                    size: 681574400,
                     async: true,
                     fixed_chunk_size: 1024 * 1024,
                     use_parts: true,
                 },
                 name: "ReactOS",
+                acpi: true,
                 homepage: "https://reactos.org/",
             },
             {
@@ -1006,7 +1083,7 @@
                     fixed_chunk_size: 1024 * 1024,
                     use_parts: true,
                 },
-                name: "Android",
+                name: "Android 4",
             },
             {
                 id: "tinycore",
@@ -1325,9 +1402,12 @@
             {
                 element.onclick = e =>
                 {
-                    e.preventDefault();
-                    element.blur();
-                    start_emulation(os, null);
+                    if(!e.ctrlKey)
+                    {
+                        e.preventDefault();
+                        element.blur();
+                        start_emulation(os, null);
+                    }
                 };
             }
         }
@@ -1383,6 +1463,85 @@
                     start_emulation(profile, query_args);
                 });
         }
+
+        const os_info = Array.from(document.querySelectorAll("#oses tbody tr")).map(element =>
+        {
+            const [_, size_raw, unit] = element.children[1].textContent.match(/([\d\.]+)\+? (\w+)/);
+            let size = +size_raw;
+            if(unit === "MB") size *= 1024 * 1024;
+            else if(unit === "KB") size *= 1024;
+            return {
+                element,
+                size,
+                graphical: element.children[2].firstChild.className === "gui_icon",
+                family: element.children[3].textContent.replace(/-like/, ""),
+                arch: element.children[4].textContent,
+                status: element.children[5].textContent,
+                source: element.children[6].textContent,
+                languages: new Set(element.children[7].textContent.split(", ")),
+                medium: element.children[8].textContent,
+            };
+        });
+
+        const filter_elements = document.querySelectorAll("#filter input");
+        for(const element of filter_elements)
+        {
+            element.onchange = update_filters;
+        }
+
+        function update_filters()
+        {
+            const filter = {};
+            for(const element of filter_elements)
+            {
+                filter[element.id.replace(/filter_/, "")] = element.checked;
+            }
+
+            const show_all = !Object.values(filter).includes(true);
+            for(const os of os_info)
+            {
+                const show = show_all ||
+                    filter["graphical"] && os.graphical ||
+                    filter["text"] && !os.graphical ||
+                    filter["linux"] && os.family === "Linux" ||
+                    filter["bsd"] && os.family === "BSD" ||
+                    filter["windows"] && os.family === "Windows" ||
+                    filter["unix"] && os.family === "Unix" ||
+                    filter["dos"] && os.family === "DOS" ||
+                    filter["custom"] && os.family === "Custom" ||
+                    filter["floppy"] && os.medium === "Floppy" ||
+                    filter["cd"] && os.medium === "CD" ||
+                    filter["hd"] && os.medium === "HD" ||
+                    filter["modern"] && os.status === "Modern" ||
+                    filter["historic"] && os.status === "Historic" ||
+                    filter["opensource"] && os.source === "Open-source" ||
+                    filter["proprietary"] && os.source === "Proprietary" ||
+                    filter["bootsector"] && os.size <= 512 ||
+                    filter["lt5mb"] && os.size <= 5 * 1024 * 1024 ||
+                    filter["gt5mb"] && os.size > 5 * 1024 * 1024 ||
+                    filter["16bit"] && os.arch === "16-bit" ||
+                    filter["32bit"] && os.arch === "32-bit" ||
+                    filter["asm"] && os.languages.has("ASM") ||
+                    filter["c"] && os.languages.has("C") ||
+                    filter["cpp"] && os.languages.has("C++") ||
+                    filter["other_lang"] && ["Java", "Haskell", "Rust", "Erlang", "Oberon"].some(l => os.languages.has(l));
+
+                os.element.style.display = show ? "" : "none";
+            }
+        }
+
+        function set_proxy_value(id, value)
+        {
+            const elem = $(id);
+            if(elem)
+            {
+                elem.onclick = () => $("relay_url").value = value;
+            }
+        }
+        set_proxy_value("network_none", "");
+        set_proxy_value("network_fetch", "fetch");
+        set_proxy_value("network_relay", "wss://relay.widgetry.org/");
+        set_proxy_value("network_wisp", "wisps://wisp.mercurywork.shop/v86/");
     }
 
     function debug_onload()
@@ -1471,7 +1630,8 @@
     {
         $("boot_options").style.display = "none";
 
-        const new_query_args = new URLSearchParams({ "profile": profile?.id || "custom" });
+        const new_query_args = new Map();
+        new_query_args.set("profile", profile?.id || "custom");
 
         const settings = {};
 
@@ -1571,7 +1731,7 @@
                     settings.vga_memory_size = vram * 1024 * 1024;
                 }
 
-                settings.acpi = query_args.has("acpi") ? bool_arg(query_args.get("acpi")) : undefined;
+                settings.acpi = query_args.has("acpi") ? bool_arg(query_args.get("acpi")) : settings.acpi;
                 settings.use_bochs_bios = query_args.get("bios") === "bochs";
                 settings.net_device_type = query_args.get("net_device_type") === "virtio" ? "virtio" : "ne2k";
             }
@@ -1584,10 +1744,15 @@
         if(!settings.relay_url)
         {
             settings.relay_url = $("relay_url").value;
-            if(!DEFAULT_NETWORKING_PROXIES.includes(settings.relay_url)) new_query_args.append("relay_url", settings.relay_url);
+            if(!DEFAULT_NETWORKING_PROXIES.includes(settings.relay_url)) new_query_args.set("relay_url", settings.relay_url);
+        }
+        if(settings.relay_url.startsWith("fetch:"))
+        {
+            settings.cors_proxy = settings.relay_url.slice(6);
+            settings.relay_url = "fetch";
         }
         settings.disable_audio = $("disable_audio").checked || settings.disable_audio;
-        if(settings.disable_audio) new_query_args.append("mute", "1");
+        if(settings.disable_audio) new_query_args.set("mute", "1");
 
         // some settings cannot be overridden when a state image is used
         if(!settings.initial_state)
@@ -1646,26 +1811,26 @@
             {
                 settings.memory_size = memory_size * MB;
             }
-            if(memory_size !== DEFAULT_MEMORY_SIZE) new_query_args.append("m", String(memory_size));
+            if(memory_size !== DEFAULT_MEMORY_SIZE) new_query_args.set("m", String(memory_size));
 
             const vga_memory_size = parseInt($("vga_memory_size").value, 10) || DEFAULT_VGA_MEMORY_SIZE;
             if(!settings.vga_memory_size || vga_memory_size !== DEFAULT_VGA_MEMORY_SIZE)
             {
                 settings.vga_memory_size = vga_memory_size * MB;
             }
-            if(vga_memory_size !== DEFAULT_VGA_MEMORY_SIZE) new_query_args.append("vram", String(vga_memory_size));
+            if(vga_memory_size !== DEFAULT_VGA_MEMORY_SIZE) new_query_args.set("vram", String(vga_memory_size));
 
             const boot_order = parseInt($("boot_order").value, 16) || DEFAULT_BOOT_ORDER;
             if(!settings.boot_order || boot_order !== DEFAULT_BOOT_ORDER)
             {
                 settings.boot_order = boot_order;
             }
-            if(settings.boot_order !== DEFAULT_BOOT_ORDER) new_query_args.append("boot_order", String(settings.boot_order));
+            if(settings.boot_order !== DEFAULT_BOOT_ORDER) new_query_args.set("boot_order", String(settings.boot_order));
 
             if(settings.acpi === undefined)
             {
                 settings.acpi = $("acpi").checked;
-                if(settings.acpi) new_query_args.append("acpi", "1");
+                if(settings.acpi) new_query_args.set("acpi", "1");
             }
 
             if(!settings.bios)
@@ -1701,6 +1866,7 @@
             net_device: {
                 type: settings.net_device_type || "ne2k",
                 relay_url: settings.relay_url,
+                cors_proxy: settings.cors_proxy
             },
             autostart: true,
 
@@ -1759,7 +1925,7 @@
                     }, CLEAR_STATS ? 5000 : 1000);
             }
 
-            if(["dsl", "helenos", "android", "android4"].includes(profile?.id))
+            if(["dsl", "helenos", "android", "android4", "redox", "beos"].includes(profile?.id))
             {
                 setTimeout(() => {
                     // hack: Start automatically
@@ -1767,7 +1933,7 @@
                 }, 3000);
             }
 
-            init_ui(settings, emulator);
+            init_ui(profile, settings, emulator);
 
             if(query_args?.has("c"))
             {
@@ -1803,7 +1969,7 @@
      * @param {Object} settings
      * @param {V86} emulator
      */
-    function init_ui(settings, emulator)
+    function init_ui(profile, settings, emulator)
     {
         $("loading").style.display = "none";
         $("runtime_options").style.display = "block";
@@ -1840,7 +2006,7 @@
 
         $("exit").onclick = function()
         {
-            emulator.stop();
+            emulator.destroy();
             location.href = location.pathname;
         };
 
@@ -2042,7 +2208,7 @@
         {
             var elem = $("get_" + type + "_image");
 
-            if(!obj || obj.size > 100 * 1024 * 1024)
+            if(!obj || obj.async)
             {
                 elem.style.display = "none";
                 return;
@@ -2050,7 +2216,7 @@
 
             elem.onclick = function(e)
             {
-                const filename = buffer.file && buffer.file.name || (settings.id + (type === "cdrom" ? ".iso" : ".img"));
+                const filename = buffer.file && buffer.file.name || ((profile?.id || "v86") + (type === "cdrom" ? ".iso" : ".img"));
 
                 if(buffer.get_as_file)
                 {
@@ -2269,6 +2435,11 @@
 
         $("screen_container").onclick = function()
         {
+            if(emulator.is_running() && emulator.speaker_adapter && emulator.speaker_adapter.audio_context.state === "suspended")
+            {
+                emulator.speaker_adapter.audio_context.resume();
+            }
+
             if(mouse_is_enabled && os_uses_mouse)
             {
                 emulator.lock_mouse();
@@ -2473,7 +2644,7 @@
     {
         if(window.history.pushState)
         {
-            const search = "?" + params.toString();
+            let search = "?" + params.entries().map(([key, value]) => key + "=" + value.replace(/[?&=#+]/g, encodeURIComponent))["toArray"]().join("&");
             window.history.pushState({ search }, "", search);
         }
     }

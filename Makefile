@@ -79,7 +79,7 @@ CARGO_FLAGS_SAFE=\
 CARGO_FLAGS=$(CARGO_FLAGS_SAFE) -C target-feature=+bulk-memory -C target-feature=+multivalue -C target-feature=+simd128
 
 CORE_FILES=const.js config.js io.js main.js lib.js buffer.js ide.js pci.js floppy.js \
-	   memory.js dma.js pit.js vga.js vga_text.js ps2.js rtc.js uart.js \
+	   memory.js dma.js pit.js vga.js ps2.js rtc.js uart.js \
 	   acpi.js apic.js ioapic.js \
 	   state.js ne2k.js sb16.js virtio.js virtio_console.js virtio_net.js \
 	   bus.js log.js cpu.js debug.js \
@@ -318,10 +318,12 @@ rust-test-intensive:
 	QUICKCHECK_TESTS=100000000 make rust-test
 
 api-tests: all-debug
-#	./tests/api/clean-shutdown.js \
-	./tests/api/reset.js \
-	./tests/api/floppy-insert-eject.js \
-	./tests/api/serial.js \
+	./tests/api/clean-shutdown.js
+	./tests/api/state.js
+	./tests/api/reset.js
+	#./tests/api/floppy-insert-eject.js # disabled for now, sometimes hangs
+	./tests/api/serial.js
+	./tests/api/reboot.js
 
 all-tests: eslint kvm-unit-test qemutests qemutests-release jitpagingtests api-tests nasmtests nasmtests-force-jit tests expect-tests
 	# Skipping:

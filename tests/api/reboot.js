@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 "use strict";
 
-// This test checks that reset works
-
 const TEST_RELEASE_BUILD = +process.env.TEST_RELEASE_BUILD;
 
 const fs = require("fs");
@@ -14,34 +12,50 @@ const config = {
     bios: { url: __dirname + "/../../bios/seabios.bin" },
     vga_bios: { url: __dirname + "/../../bios/vgabios.bin" },
     cdrom: { url: __dirname + "/../../images/linux4.iso", async: true },
-    network_relay_url: "<UNUSED>",
+    net_device: {
+        relay_url: "fetch",
+        type: "virtio",
+    },
     autostart: true,
     memory_size: 32 * 1024 * 1024,
     filesystem: {},
+    virtio_console: true,
     log_level: 0,
     disable_jit: +process.env.DISABLE_JIT,
 };
 
 const emulator = new V86(config);
 
-let did_restart = false;
+let did_reboot = false;
 let serial_text = "";
+
+const timeout = setTimeout(() => {
+    console.log(serial_data);
+    throw new Error("Timeout");
+}, 120 * 1000);
 
 emulator.add_listener("serial0-output-byte", function(byte)
 {
     var chr = String.fromCharCode(byte);
     serial_text += chr;
 
-    if(serial_text.includes("Files send via emulator appear in /mnt/")) {
-        serial_text = "";
-        if(did_restart) {
+    if(did_reboot)
+    {
+        if(serial_text.endsWith("Files send via emulator appear in /mnt/"))
+        {
             console.log("Ok");
             emulator.destroy();
+            clearTimeout(timeout);
         }
-        else {
-            console.log("Calling restart()");
-            emulator.restart();
-            did_restart = true;
+    }
+    else
+    {
+        if(serial_text.endsWith("~% "))
+        {
+            console.log("rebooting");
+            emulator.serial0_send("reboot\n");
+            serial_text = "";
+            did_reboot = true;
         }
     }
 });

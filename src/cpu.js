@@ -689,15 +689,15 @@ CPU.prototype.reboot_internal = function()
 
     if(this.devices.virtio_9p)
     {
-        this.devices.virtio_9p.Reset();
+        this.devices.virtio_9p.reset();
     }
     if(this.devices.virtio_console)
     {
-        this.devices.virtio_console.Reset();
+        this.devices.virtio_console.reset();
     }
     if(this.devices.virtio_net)
     {
-        this.devices.virtio_net.Reset();
+        this.devices.virtio_net.reset();
     }
 
     this.load_bios();
@@ -940,7 +940,7 @@ CPU.prototype.init = function(settings, device_bus)
 
         this.devices.dma = new DMA(this);
 
-        this.devices.vga = new VGAScreen(this, device_bus, settings.screen, settings.vga_memory_size || 8 * 1024 * 1024, settings.screen_options || {});
+        this.devices.vga = new VGAScreen(this, device_bus, settings.screen, settings.vga_memory_size || 8 * 1024 * 1024);
 
         this.devices.ps2 = new PS2(this, device_bus);
 
@@ -1443,6 +1443,8 @@ CPU.prototype.load_bios = function()
         return;
     }
 
+    dbg_assert(bios instanceof ArrayBuffer);
+
     // load bios
     var data = new Uint8Array(bios),
         start = 0x100000 - bios.byteLength;
@@ -1451,6 +1453,8 @@ CPU.prototype.load_bios = function()
 
     if(vga_bios)
     {
+        dbg_assert(vga_bios instanceof ArrayBuffer);
+
         // load vga bios
         var vga_bios8 = new Uint8Array(vga_bios);
 

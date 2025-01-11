@@ -16,8 +16,10 @@ function FetchNetworkAdapter(bus, config)
     this.vm_ip = new Uint8Array((config.vm_ip || "192.168.86.100").split(".").map(function(x) { return parseInt(x, 10); }));
     this.masquerade = config.masquerade === undefined || !!config.masquerade;
     this.vm_mac = new Uint8Array(6);
-
+    this.dns_method = config.dns_method || "static";
+    this.doh_server = config.doh_server;
     this.tcp_conn = {};
+    this.eth_encoder_buf = create_eth_encoder_buf();
 
     // Ex: 'https://corsproxy.io/?'
     this.cors_proxy = config.cors_proxy;
@@ -37,7 +39,7 @@ FetchNetworkAdapter.prototype.destroy = function()
 {
 };
 
-FetchNetworkAdapter.prototype.on_tcp_connection = function(adapter, packet, tuple)
+FetchNetworkAdapter.prototype.on_tcp_connection = function(packet, tuple)
 {
     if(packet.tcp.dport === 80) {
         let conn = new TCPConnection();
@@ -46,7 +48,7 @@ FetchNetworkAdapter.prototype.on_tcp_connection = function(adapter, packet, tupl
         conn.on_data = on_data_http;
         conn.tuple = tuple;
         conn.accept(packet);
-        adapter.tcp_conn[tuple] = conn;
+        this.tcp_conn[tuple] = conn;
         return true;
     }
     return false;
@@ -54,11 +56,10 @@ FetchNetworkAdapter.prototype.on_tcp_connection = function(adapter, packet, tupl
 
 /**
  * @this {TCPConnection}
- * @param {ArrayBuffer} data
+ * @param {!ArrayBuffer} data
  */
 async function on_data_http(data)
 {
-    if(!data) return; // Make type checking happy.
     this.read = this.read || "";
     this.read += new TextDecoder().decode(data);
     if(this.read && this.read.indexOf("\r\n\r\n") !== -1) {
@@ -83,11 +84,14 @@ async function on_data_http(data)
 
         let req_headers = new Headers();
         for(let i = 1; i < headers.length; ++i) {
-            let parts = headers[i].split(": ");
-            let key =  parts[0].toLowerCase();
-            let value = parts[1];
-            if( key === "host" ) target.host = value;
-            else if( key.length > 1 ) req_headers.set(parts[0], value);
+            const header = this.net.parse_http_header(headers[i]);
+            if(!header) {
+                console.warn('The request contains an invalid header: "%s"', headers[i]);
+                this.write(new TextEncoder().encode("HTTP/1.1 400 Bad Request\r\nContent-Length: 0"));
+                return;
+            }
+            if( header.key.toLowerCase() === "host" ) target.host = header.value;
+            else req_headers.append(header.key, header.value);
         }
 
         dbg_log("HTTP Dispatch: " + target.href, LOG_FETCH);
@@ -99,6 +103,7 @@ async function on_data_http(data)
         if(["put", "post"].indexOf(opts.method.toLowerCase()) !== -1) {
             opts.body = data;
         }
+/*
         const [resp, ab] = await this.net.fetch(target.href, opts);
         const lines = [
             `HTTP/1.1 ${resp.status} ${resp.statusText}`,
@@ -122,6 +127,54 @@ async function on_data_http(data)
 
         this.write(new TextEncoder().encode(lines.join("\r\n")));
         this.write(new Uint8Array(ab));
+        this.close();
+*/
+        const fetch_url = this.net.cors_proxy ? this.net.cors_proxy + encodeURIComponent(target.href) : target.href;
+        const encoder = new TextEncoder();
+        let response_started = false;
+        fetch(fetch_url, opts).then((resp) => {
+            const header_lines = [
+                `HTTP/1.1 ${resp.status} ${resp.statusText}`,
+                `x-was-fetch-redirected: ${!!resp.redirected}`,
+                `x-fetch-resp-url: ${resp.url}`,
+                "Connection: closed"
+            ];
+            for(const [key, value] of resp.headers.entries()) {
+                if(!["content-encoding", "connection", "content-length", "transfer-encoding"].includes(key.toLowerCase())) {
+                    header_lines.push(`${key}:  ${value}`);
+                }
+            }
+            this.write(encoder.encode(header_lines.join("\r\n") + "\r\n\r\n"));
+            response_started = true;
+
+            const resp_reader = resp.body.getReader();
+            const pump = ({ value, done }) => {
+                if(value) {
+                    this.write(value);
+                }
+                if(done) {
+                    this.close();
+                }
+                else {
+                    return resp_reader.read().then(pump);
+                }
+            };
+            resp_reader.read().then(pump);
+        })
+        .catch((e) => {
+            console.warn("Fetch Failed: " + fetch_url + "\n" + e);
+            if(!response_started) {
+                const body = encoder.encode(`Fetch ${fetch_url} failed:\n\n${e.stack || e.message}`);
+                const header_lines = [
+                    "HTTP/1.1 502 Fetch Error",
+                    "Content-Type: text/plain",
+                    `Content-Length: ${body.length}`,
+                    "Connection: closed"
+                ];
+                this.writev([encoder.encode(header_lines.join("\r\n") + "\r\n\r\n"), body]);
+            }
+            this.close();
+        });
     }
 }
 
@@ -151,18 +204,47 @@ FetchNetworkAdapter.prototype.fetch = async function(url, options)
     }
 };
 
+FetchNetworkAdapter.prototype.parse_http_header = function(header)
+{
+    const parts = header.match(/^([^:]*):(.*)$/);
+    if(!parts) {
+        dbg_log("Unable to parse HTTP header", LOG_FETCH);
+        return;
+    }
+
+    const key = parts[1];
+    const value = parts[2].trim();
+
+    if(key.length === 0)
+    {
+        dbg_log("Header key is empty, raw header", LOG_FETCH);
+        return;
+    }
+    if(value.length === 0)
+    {
+        dbg_log("Header value is empty", LOG_FETCH);
+        return;
+    }
+    if(!/^[\w-]+$/.test(key))
+    {
+        dbg_log("Header key contains forbidden characters", LOG_FETCH);
+        return;
+    }
+    if(!/^[\x20-\x7E]+$/.test(value))
+    {
+        dbg_log("Header value contains forbidden characters", LOG_FETCH);
+        return;
+    }
+
+    return { key, value };
+};
+
 /**
  * @param {Uint8Array} data
  */
 FetchNetworkAdapter.prototype.send = function(data)
 {
     handle_fake_networking(data, this);
-};
-
-
-FetchNetworkAdapter.prototype.tcp_connect = function(dport)
-{
-    return fake_tcp_connect(dport, this);
 };
 
 /**

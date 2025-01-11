@@ -385,6 +385,7 @@ impl SegmentDescriptor {
     pub fn is_system(&self) -> bool { self.access_byte() & 0x10 == 0 }
     pub fn system_type(&self) -> u8 { self.access_byte() & 0xF }
 
+    pub fn accessed(&self) -> bool { self.access_byte() & 1 == 1 }
     pub fn is_rw(&self) -> bool { self.access_byte() & 2 == 2 }
     pub fn is_dc(&self) -> bool { self.access_byte() & 4 == 4 }
     pub fn is_executable(&self) -> bool { self.access_byte() & 8 == 8 }
@@ -405,6 +406,11 @@ impl SegmentDescriptor {
     pub fn set_busy(&self) -> SegmentDescriptor {
         SegmentDescriptor {
             raw: self.raw | 2 << 40,
+        }
+    }
+    pub fn set_accessed(&self) -> SegmentDescriptor {
+        SegmentDescriptor {
+            raw: self.raw | 1 << 40,
         }
     }
 }
@@ -586,13 +592,9 @@ pub unsafe fn iret(is_16: bool) {
     let cs_selector = SegmentSelector::of_u16(new_cs as u16);
     let cs_descriptor = match return_on_pagefault!(lookup_segment_selector(cs_selector)) {
         Ok((desc, _)) => desc,
-        Err(selector_unusable) => match selector_unusable {
-            SelectorNullOrInvalid::IsNull => {
-                panic!("Unimplemented: CS selector is null");
-            },
-            SelectorNullOrInvalid::OutsideOfTableLimit => {
-                panic!("Unimplemented: CS selector is invalid");
-            },
+        Err(SelectorNullOrInvalid::IsNull) => panic!("Unimplemented: CS selector is null"),
+        Err(SelectorNullOrInvalid::OutsideOfTableLimit) => {
+            panic!("Unimplemented: CS selector is invalid")
         },
     };
 
@@ -647,18 +649,16 @@ pub unsafe fn iret(is_16: bool) {
         let ss_selector = SegmentSelector::of_u16(temp_ss as u16);
         let ss_descriptor = match return_on_pagefault!(lookup_segment_selector(ss_selector)) {
             Ok((desc, _)) => desc,
-            Err(selector_unusable) => match selector_unusable {
-                SelectorNullOrInvalid::IsNull => {
-                    dbg_log!("#GP for loading 0 in SS sel={:x}", temp_ss);
-                    dbg_trace();
-                    trigger_gp(0);
-                    return;
-                },
-                SelectorNullOrInvalid::OutsideOfTableLimit => {
-                    dbg_log!("#GP for loading invalid in SS sel={:x}", temp_ss);
-                    trigger_gp(temp_ss & !3);
-                    return;
-                },
+            Err(SelectorNullOrInvalid::IsNull) => {
+                dbg_log!("#GP for loading 0 in SS sel={:x}", temp_ss);
+                dbg_trace();
+                trigger_gp(0);
+                return;
+            },
+            Err(SelectorNullOrInvalid::OutsideOfTableLimit) => {
+                dbg_log!("#GP for loading invalid in SS sel={:x}", temp_ss);
+                trigger_gp(temp_ss & !3);
+                return;
             },
         };
         let new_cpl = cs_selector.rpl();
@@ -852,15 +852,13 @@ pub unsafe fn call_interrupt_vector(
             SegmentSelector::of_u16(selector as u16)
         )) {
             Ok((desc, _)) => desc,
-            Err(selector_unusable) => match selector_unusable {
-                SelectorNullOrInvalid::IsNull => {
-                    dbg_log!("is null");
-                    panic!("Unimplemented: #GP handler");
-                },
-                SelectorNullOrInvalid::OutsideOfTableLimit => {
-                    dbg_log!("is invalid");
-                    panic!("Unimplemented: #GP handler (error code)");
-                },
+            Err(SelectorNullOrInvalid::IsNull) => {
+                dbg_log!("is null");
+                panic!("Unimplemented: #GP handler");
+            },
+            Err(SelectorNullOrInvalid::OutsideOfTableLimit) => {
+                dbg_log!("is invalid");
+                panic!("Unimplemented: #GP handler (error code)");
             },
         };
 
@@ -1113,17 +1111,15 @@ pub unsafe fn far_jump(eip: i32, selector: i32, is_call: bool, is_osize_32: bool
     let cs_selector = SegmentSelector::of_u16(selector as u16);
     let info = match return_on_pagefault!(lookup_segment_selector(cs_selector)) {
         Ok((desc, _)) => desc,
-        Err(selector_unusable) => match selector_unusable {
-            SelectorNullOrInvalid::IsNull => {
-                dbg_log!("#gp null cs");
-                trigger_gp(0);
-                return;
-            },
-            SelectorNullOrInvalid::OutsideOfTableLimit => {
-                dbg_log!("#gp invalid cs: {:x}", selector);
-                trigger_gp(selector & !3);
-                return;
-            },
+        Err(SelectorNullOrInvalid::IsNull) => {
+            dbg_log!("#gp null cs");
+            trigger_gp(0);
+            return;
+        },
+        Err(SelectorNullOrInvalid::OutsideOfTableLimit) => {
+            dbg_log!("#gp invalid cs: {:x}", selector);
+            trigger_gp(selector & !3);
+            return;
         },
     };
 
@@ -1154,17 +1150,15 @@ pub unsafe fn far_jump(eip: i32, selector: i32, is_call: bool, is_osize_32: bool
                 SegmentSelector::of_u16(cs_selector as u16)
             )) {
                 Ok((desc, _)) => desc,
-                Err(selector_unusable) => match selector_unusable {
-                    SelectorNullOrInvalid::IsNull => {
-                        dbg_log!("#gp null cs");
-                        trigger_gp(0);
-                        return;
-                    },
-                    SelectorNullOrInvalid::OutsideOfTableLimit => {
-                        dbg_log!("#gp invalid cs: {:x}", selector);
-                        trigger_gp(selector & !3);
-                        return;
-                    },
+                Err(SelectorNullOrInvalid::IsNull) => {
+                    dbg_log!("#gp null cs");
+                    trigger_gp(0);
+                    return;
+                },
+                Err(SelectorNullOrInvalid::OutsideOfTableLimit) => {
+                    dbg_log!("#gp invalid cs: {:x}", selector);
+                    trigger_gp(selector & !3);
+                    return;
                 },
             };
 
@@ -1198,13 +1192,11 @@ pub unsafe fn far_jump(eip: i32, selector: i32, is_call: bool, is_osize_32: bool
                 let ss_selector = SegmentSelector::of_u16(new_ss as u16);
                 let ss_info = match return_on_pagefault!(lookup_segment_selector(ss_selector)) {
                     Ok((desc, _)) => desc,
-                    Err(selector_unusable) => match selector_unusable {
-                        SelectorNullOrInvalid::IsNull => {
-                            panic!("null ss: {}", new_ss);
-                        },
-                        SelectorNullOrInvalid::OutsideOfTableLimit => {
-                            panic!("invalid ss: {}", new_ss);
-                        },
+                    Err(SelectorNullOrInvalid::IsNull) => {
+                        panic!("null ss: {}", new_ss);
+                    },
+                    Err(SelectorNullOrInvalid::OutsideOfTableLimit) => {
+                        panic!("invalid ss: {}", new_ss);
                     },
                 };
 
@@ -1438,17 +1430,15 @@ pub unsafe fn far_return(eip: i32, selector: i32, stack_adjust: i32, is_osize_32
     let cs_selector = SegmentSelector::of_u16(selector as u16);
     let info = match return_on_pagefault!(lookup_segment_selector(cs_selector)) {
         Ok((desc, _)) => desc,
-        Err(selector_unusable) => match selector_unusable {
-            SelectorNullOrInvalid::IsNull => {
-                dbg_log!("far return: #gp null cs");
-                trigger_gp(0);
-                return;
-            },
-            SelectorNullOrInvalid::OutsideOfTableLimit => {
-                dbg_log!("far return: #gp invalid cs: {:x}", selector);
-                trigger_gp(selector & !3);
-                return;
-            },
+        Err(SelectorNullOrInvalid::IsNull) => {
+            dbg_log!("far return: #gp null cs");
+            trigger_gp(0);
+            return;
+        },
+        Err(SelectorNullOrInvalid::OutsideOfTableLimit) => {
+            dbg_log!("far return: #gp invalid cs: {:x}", selector);
+            trigger_gp(selector & !3);
+            return;
         },
     };
 
@@ -2083,7 +2073,15 @@ pub unsafe fn do_page_walk(
     }
 
     let is_in_mapped_range = in_mapped_range(high);
-    let has_code = !is_in_mapped_range && jit::jit_page_has_code(Page::page_of(high));
+    let has_code = if side_effects {
+        !is_in_mapped_range && jit::jit_page_has_code(Page::page_of(high))
+    }
+    else {
+        // If side_effects is false, don't call into jit::jit_page_has_code. This value is not used
+        // anyway (we only get here by translate_address_read_no_side_effects, which only uses the
+        // address part)
+        true
+    };
     let info_bits = TLB_VALID
         | if for_writing { 0 } else { TLB_READONLY }
         | if allow_user { 0 } else { TLB_NO_USER }
@@ -2123,6 +2121,7 @@ pub unsafe fn full_clear_tlb() {
     valid_tlb_entries_count = 0;
 
     if CHECK_TLB_INVARIANTS {
+        #[allow(static_mut_refs)]
         for &entry in tlb_data.iter() {
             dbg_assert!(entry == 0);
         }
@@ -2151,6 +2150,7 @@ pub unsafe fn clear_tlb() {
     valid_tlb_entries_count = global_page_offset;
 
     if CHECK_TLB_INVARIANTS {
+        #[allow(static_mut_refs)]
         for &entry in tlb_data.iter() {
             dbg_assert!(entry == 0 || 0 != entry & TLB_GLOBAL);
         }
@@ -2191,6 +2191,7 @@ pub unsafe fn trigger_gp_jit(code: i32, eip_offset_in_page: i32) {
 
 #[no_mangle]
 pub unsafe fn trigger_fault_end_jit() {
+    #[allow(static_mut_refs)]
     let (code, error_code) = jit_fault.take().unwrap();
     if DEBUG {
         if cpu_exception_hook(code) {
@@ -2373,16 +2374,23 @@ pub unsafe fn lookup_segment_selector(
     }
 
     let (table_offset, table_limit) = if selector.is_gdt() {
-        (*gdtr_offset as u32, *gdtr_size as u16)
+        (*gdtr_offset as u32, *gdtr_size as u32)
     }
     else {
         (
             *segment_offsets.offset(LDTR as isize) as u32,
-            *segment_limits.offset(LDTR as isize) as u16,
+            *segment_limits.offset(LDTR as isize) as u32,
         )
     };
 
-    if selector.descriptor_offset() > table_limit {
+    if selector.descriptor_offset() as u32 > table_limit {
+        dbg_log!(
+            "segment outside of table limit: selector={:x} offset={:x} isgdt={} table_limit={:x}",
+            selector.raw,
+            selector.descriptor_offset(),
+            selector.is_gdt(),
+            table_limit
+        );
         return Ok(Err(SelectorNullOrInvalid::OutsideOfTableLimit));
     }
 
@@ -2419,41 +2427,34 @@ pub unsafe fn switch_seg(reg: i32, selector_raw: i32) -> bool {
     }
 
     let selector = SegmentSelector::of_u16(selector_raw as u16);
-    let descriptor = match return_on_pagefault!(lookup_segment_selector(selector), false) {
-        Ok((desc, _)) => desc,
-        Err(selector_unusable) => {
-            // The selector couldn't be used to fetch a descriptor, so we handle all of those
-            // cases
-            if selector_unusable == SelectorNullOrInvalid::IsNull {
+    let (mut descriptor, descriptor_address) =
+        match return_on_pagefault!(lookup_segment_selector(selector), false) {
+            Ok(desc) => desc,
+            Err(SelectorNullOrInvalid::IsNull) => {
                 if reg == SS {
                     dbg_log!("#GP for loading 0 in SS sel={:x}", selector_raw);
                     trigger_gp(0);
                     return false;
                 }
-                else if reg != CS {
+                else {
                     // es, ds, fs, gs
                     *sreg.offset(reg as isize) = selector_raw as u16;
                     *segment_is_null.offset(reg as isize) = true;
                     update_state_flags();
                     return true;
                 }
-            }
-            else if selector_unusable == SelectorNullOrInvalid::OutsideOfTableLimit {
+            },
+            Err(SelectorNullOrInvalid::OutsideOfTableLimit) => {
                 dbg_log!(
-                    "#GP for loading invalid in seg={} sel={:x} gdt_limit={:x}",
+                    "#GP for loading invalid in seg={} sel={:x}",
                     reg,
                     selector_raw,
-                    *gdtr_size,
                 );
                 dbg_trace();
                 trigger_gp(selector_raw & !3);
                 return false;
-            }
-
-            dbg_assert!(false);
-            return false;
-        },
-    };
+            },
+        };
 
     if reg == SS {
         if descriptor.is_system()
@@ -2473,10 +2474,6 @@ pub unsafe fn switch_seg(reg: i32, selector_raw: i32) -> bool {
         }
 
         *stack_size_32 = descriptor.is_32();
-    }
-    else if reg == CS {
-        // handled by switch_cs_real_mode, far_return or far_jump
-        dbg_assert!(false);
     }
     else {
         if descriptor.is_system()
@@ -2512,6 +2509,15 @@ pub unsafe fn switch_seg(reg: i32, selector_raw: i32) -> bool {
             trigger_np(selector_raw & !3);
             return false;
         }
+    }
+
+    if !descriptor.accessed() {
+        descriptor = descriptor.set_accessed();
+
+        memory::write8(
+            translate_address_system_write(descriptor_address + 5).unwrap(),
+            descriptor.access_byte() as i32,
+        );
     }
 
     *segment_is_null.offset(reg as isize) = false;
@@ -2573,13 +2579,17 @@ pub unsafe fn load_tr(selector: i32) {
     *sreg.offset(TR as isize) = selector.raw;
 
     // Mark task as busy
-    safe_write64(descriptor_address, descriptor.set_busy().raw).unwrap();
+    memory::write8(
+        translate_address_system_write(descriptor_address + 5).unwrap(),
+        descriptor.set_busy().access_byte() as i32,
+    );
 }
 
 pub unsafe fn load_ldt(selector: i32) -> OrPageFault<()> {
     let selector = SegmentSelector::of_u16(selector as u16);
 
     if selector.is_null() {
+        dbg_log!("lldt: null loaded");
         *segment_limits.offset(LDTR as isize) = 0;
         *segment_offsets.offset(LDTR as isize) = 0;
         *sreg.offset(LDTR as isize) = selector.raw;
@@ -2613,6 +2623,12 @@ pub unsafe fn load_ldt(selector: i32) -> OrPageFault<()> {
         );
     }
 
+    dbg_log!(
+        "lldt: {:x} offset={:x} limit={:x}",
+        selector.raw,
+        descriptor.base(),
+        descriptor.effective_limit()
+    );
     *segment_limits.offset(LDTR as isize) = descriptor.effective_limit();
     *segment_offsets.offset(LDTR as isize) = descriptor.base();
     *sreg.offset(LDTR as isize) = selector.raw;
@@ -2919,11 +2935,12 @@ pub unsafe fn cycle_internal() {
         );
 
         if cfg!(feature = "profiler") {
-            dbg_assert!(match ::cpu::cpu::debug_last_jump {
+            dbg_assert!(match debug_last_jump {
                 LastJump::Compiled { .. } => true,
                 _ => false,
             });
-            let last_jump_addr = ::cpu::cpu::debug_last_jump.phys_address().unwrap();
+            #[allow(static_mut_refs)]
+            let last_jump_addr = debug_last_jump.phys_address().unwrap();
             let last_jump_opcode = if last_jump_addr != 0 {
                 read32s(last_jump_addr)
             }
@@ -3407,7 +3424,7 @@ pub unsafe fn safe_read_slow_jit(
         // TODO: Could check if virtual pages point to consecutive physical and go to fast path
         // do read, write into scratch buffer
 
-        let scratch = jit_paging_scratch_buffer.0.as_mut_ptr() as u32;
+        let scratch = &raw mut jit_paging_scratch_buffer.0 as u32;
         dbg_assert!(scratch & 0xFFF == 0);
 
         for s in addr_low..((addr_low | 0xFFF) + 1) {
@@ -3420,7 +3437,7 @@ pub unsafe fn safe_read_slow_jit(
         ((scratch as i32) ^ addr) & !0xFFF
     }
     else if in_mapped_range(addr_low) {
-        let scratch = jit_paging_scratch_buffer.0.as_mut_ptr();
+        let scratch = &raw mut jit_paging_scratch_buffer.0[0];
 
         match bitsize {
             128 => ptr::write_unaligned(
@@ -3566,7 +3583,7 @@ pub unsafe fn safe_write_slow_jit(
             },
         }
 
-        let scratch = jit_paging_scratch_buffer.0.as_mut_ptr() as u32;
+        let scratch = &raw mut jit_paging_scratch_buffer.0 as u32;
         dbg_assert!(scratch & 0xFFF == 0);
         ((scratch as i32) ^ addr) & !0xFFF
     }
@@ -3582,13 +3599,13 @@ pub unsafe fn safe_write_slow_jit(
             },
         }
 
-        let scratch = jit_paging_scratch_buffer.0.as_mut_ptr() as u32;
+        let scratch = &raw mut jit_paging_scratch_buffer.0 as u32;
         dbg_assert!(scratch & 0xFFF == 0);
         ((scratch as i32) ^ addr) & !0xFFF
     }
     else {
         if !can_skip_dirty_page {
-            jit::jit_dirty_page(jit::get_jit_state(), Page::page_of(addr_low));
+            jit::jit_dirty_page(Page::page_of(addr_low));
         }
         ((addr_low as i32 + memory::mem8 as i32) ^ addr) & !0xFFF
     }
@@ -3627,7 +3644,7 @@ pub unsafe fn safe_write8(addr: i32, value: i32) -> OrPageFault<()> {
     }
     else {
         if !can_skip_dirty_page {
-            jit::jit_dirty_page(jit::get_jit_state(), Page::page_of(phys_addr));
+            jit::jit_dirty_page(Page::page_of(phys_addr));
         }
         else {
             dbg_assert!(!jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
@@ -3647,7 +3664,7 @@ pub unsafe fn safe_write16(addr: i32, value: i32) -> OrPageFault<()> {
     }
     else {
         if !can_skip_dirty_page {
-            jit::jit_dirty_page(jit::get_jit_state(), Page::page_of(phys_addr));
+            jit::jit_dirty_page(Page::page_of(phys_addr));
         }
         else {
             dbg_assert!(!jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
@@ -3671,7 +3688,7 @@ pub unsafe fn safe_write32(addr: i32, value: i32) -> OrPageFault<()> {
     }
     else {
         if !can_skip_dirty_page {
-            jit::jit_dirty_page(jit::get_jit_state(), Page::page_of(phys_addr));
+            jit::jit_dirty_page(Page::page_of(phys_addr));
         }
         else {
             dbg_assert!(!jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
@@ -3694,7 +3711,7 @@ pub unsafe fn safe_write64(addr: i32, value: u64) -> OrPageFault<()> {
         }
         else {
             if !can_skip_dirty_page {
-                jit::jit_dirty_page(jit::get_jit_state(), Page::page_of(phys_addr));
+                jit::jit_dirty_page(Page::page_of(phys_addr));
             }
             else {
                 dbg_assert!(!jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
@@ -3718,7 +3735,7 @@ pub unsafe fn safe_write128(addr: i32, value: reg128) -> OrPageFault<()> {
         }
         else {
             if !can_skip_dirty_page {
-                jit::jit_dirty_page(jit::get_jit_state(), Page::page_of(phys_addr));
+                jit::jit_dirty_page(Page::page_of(phys_addr));
             }
             else {
                 dbg_assert!(!jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
@@ -3740,10 +3757,10 @@ pub unsafe fn safe_read_write8(addr: i32, instruction: &dyn Fn(i32) -> i32) {
     }
     else {
         if !can_skip_dirty_page {
-            ::jit::jit_dirty_page(::jit::get_jit_state(), Page::page_of(phys_addr));
+            jit::jit_dirty_page(Page::page_of(phys_addr));
         }
         else {
-            dbg_assert!(!::jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
+            dbg_assert!(!jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
         }
         memory::write8_no_mmap_or_dirty_check(phys_addr, value);
     }
@@ -3766,10 +3783,10 @@ pub unsafe fn safe_read_write16(addr: i32, instruction: &dyn Fn(i32) -> i32) {
         }
         else {
             if !can_skip_dirty_page {
-                ::jit::jit_dirty_page(::jit::get_jit_state(), Page::page_of(phys_addr));
+                jit::jit_dirty_page(Page::page_of(phys_addr));
             }
             else {
-                dbg_assert!(!::jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
+                dbg_assert!(!jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
             }
             memory::write16_no_mmap_or_dirty_check(phys_addr, value);
         };
@@ -3794,10 +3811,10 @@ pub unsafe fn safe_read_write32(addr: i32, instruction: &dyn Fn(i32) -> i32) {
         }
         else {
             if !can_skip_dirty_page {
-                ::jit::jit_dirty_page(::jit::get_jit_state(), Page::page_of(phys_addr));
+                jit::jit_dirty_page(Page::page_of(phys_addr));
             }
             else {
-                dbg_assert!(!::jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
+                dbg_assert!(!jit::jit_page_has_code(Page::page_of(phys_addr as u32)));
             }
             memory::write32_no_mmap_or_dirty_check(phys_addr, value);
         };
@@ -4059,8 +4076,8 @@ pub unsafe fn read_tsc() -> u64 {
         if TSC_VERBOSE_LOGGING || tsc_last_extra >= tsc_resolution {
             dbg_log!(
                 "rdtsc: jump from {}+{} to {} (diff {}, {}%)",
-                tsc_last_value,
-                tsc_last_extra,
+                tsc_last_value as u64,
+                tsc_last_extra as u64,
                 value,
                 value - (tsc_last_value + tsc_last_extra),
                 (100 * tsc_last_extra) / tsc_resolution,
@@ -4243,9 +4260,11 @@ pub unsafe fn trigger_ss(code: i32) {
 pub unsafe fn store_current_tsc() { *current_tsc = read_tsc(); }
 
 #[no_mangle]
-pub unsafe fn handle_irqs() {
+pub unsafe fn handle_irqs() { handle_irqs_internal(&mut pic::get_pic()) }
+
+pub unsafe fn handle_irqs_internal(pic: &mut pic::Pic) {
     if *flags & FLAG_INTERRUPT != 0 {
-        if let Some(irq) = pic::pic_acknowledge_irq() {
+        if let Some(irq) = pic::pic_acknowledge_irq(pic) {
             pic_call_irq(irq)
         }
         else if *acpi_enabled {
@@ -4370,7 +4389,7 @@ pub unsafe fn reset_cpu() {
 
     update_state_flags();
 
-    jit::jit_clear_cache(jit::get_jit_state());
+    jit::jit_clear_cache_js();
 }
 
 #[no_mangle]
