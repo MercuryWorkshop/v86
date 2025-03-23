@@ -11,6 +11,10 @@ const V86 = require(`../../build/${TEST_RELEASE_BUILD ? "libv86" : "libv86-debug
 const assert = require("assert").strict;
 const SHOW_LOGS = false;
 
+function wait(time) {
+    return new Promise((res) => setTimeout(res, time));
+}
+
 const tests =
 [
     {
@@ -80,7 +84,8 @@ const tests =
         end_trigger: "done\tping",
         end: (capture) =>
         {
-            assert(/2 packets transmitted, 2 packets received, 0% packet loss/.test(capture), "2 packets transmitted, 2 packets received, 0% packet loss");
+            assert(/2 packets transmitted, 2 (packets )?received, 0% packet loss/.test(capture), "2 packets transmitted, 2 packets received, 0% packet loss");
+            assert(/from 1\.2\.3\.4:/.test(capture), "got correct source ip");
         },
     },
     {
@@ -94,6 +99,36 @@ const tests =
         end: (capture) =>
         {
             assert(/.192.168.86.1. at 52:54:00:01:02:03 \[ether\] {2}on eth0/.test(capture), "(192.168.86.1) at 52:54:00:01:02:03 [ether]  on eth0");
+        },
+    },
+    {
+        name: "Accept incoming connection",
+        timeout: 60,
+        allow_failure: true,
+        start: async () =>
+        {
+            let open = await emulator.network_adapter.tcp_probe(80);
+            assert(!open, "Probe shows port not open");
+            emulator.serial0_send("echo -n hello | socat TCP4-LISTEN:80 - && echo -e done\\\\tlisten\n");
+            await wait(1000);
+            open = await emulator.network_adapter.tcp_probe(80);
+            assert(open, "Probe shows port open, but does not show as a connection");
+            await wait(1000);
+            let h = emulator.network_adapter.connect(80);
+            h.on("connect", () => {
+                h.write(new TextEncoder().encode("From VM: "));
+                h.on("data", (d) => {
+                    d.reverse();
+                    h.write(d);
+                    h.write(new TextEncoder().encode("\n"));
+                    h.close();
+                });
+            });
+        },
+        end_trigger: "done\tlisten",
+        end: (capture) =>
+        {
+            assert(/From VM: olleh/.test(capture), "got From VM");
         },
     },
     {
@@ -124,13 +159,51 @@ const tests =
             assert(/This domain is for use in illustrative examples in documents/.test(capture), "got example.org text");
         },
     },
-
+    {
+        name: "Forbidden character in header name",
+        start: () =>
+        {
+            emulator.serial0_send("wget --header='test.v86: 123' -T 10 -O - test.domain\n");
+            emulator.serial0_send("echo -e done\\\\tincorrect header name\n");
+        },
+        end_trigger: "done\tincorrect header name",
+        end: (capture) =>
+        {
+            assert(/400 Bad Request/.test(capture), "got error 400");
+        },
+    },
+    {
+        name: "Empty header value",
+        start: () =>
+        {
+            emulator.serial0_send("wget --header='test:' -T 10 -O - test.domain\n");
+            emulator.serial0_send("echo -e done\\\\tempty header value\n");
+        },
+        end_trigger: "done\tempty header value",
+        end: (capture) =>
+        {
+            assert(/400 Bad Request/.test(capture), "got error 400");
+        },
+    },
+    {
+        name: "Header without separator",
+        start: () =>
+        {
+            emulator.serial0_send("wget --spider --header='testheader' -T 10 -O - test.domain\n");
+            emulator.serial0_send("echo -e done\\\\theader without colon\n");
+        },
+        end_trigger: "done\theader without colon",
+        end: (capture) =>
+        {
+            assert(/400 Bad Request/.test(capture), "got error 400");
+        },
+    },
 ];
 
 const emulator = new V86({
     bios: { url: __dirname + "/../../bios/seabios.bin" },
     vga_bios: { url: __dirname + "/../../bios/vgabios.bin" },
-    cdrom: { url: __dirname + "/../../images/linux4.iso" },
+    bzimage: { url: __dirname + "/../../images/buildroot-bzimage68.bin" },
     autostart: true,
     memory_size: 64 * 1024 * 1024,
     disable_jit: +process.env.DISABLE_JIT,
@@ -148,12 +221,13 @@ emulator.add_listener("emulator-ready", function () {
         if(/^http:\/\/mocked.example.org\/?/.test(url)) {
             let contents = new TextEncoder().encode("This text is from the mock");
             let headers = new Headers();
-            return new Promise(res => setTimeout(() => res([
-                {status: 200, statusText: "OK", headers: headers},
-                contents.buffer
-            ]), 50));
+            headers.append("Content-Type", "text/plain");
+            headers.append("Content-Length", contents.length);
+            return new Promise(res => setTimeout(() => res(new Response(contents, {
+                headers
+            })), 50));
         }
-        return original_fetch.call(network_adapter, url, opts);
+        return original_fetch(url, opts);
     };
 });
 
@@ -227,7 +301,6 @@ emulator.add_listener("serial0-output-byte", function(byte)
 
         if(test_num >= tests.length)
         {
-            emulator.stop();
             emulator.destroy();
 
             console.log("Tests finished.");

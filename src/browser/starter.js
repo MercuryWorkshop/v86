@@ -58,7 +58,7 @@
  *
  * - `screen Object` (No screen) - An object with the following properties:
  *   - `container HTMLElement` - An HTMLElement, see above.
- *   - `disable_autoscale boolean` (false) - Disable automatic scaling of small resolutions.
+ *   - `scale` (1) - Set initial scale_x and scale_y, if 0 disable automatic upscaling and dpi-adaption
  *
  * ***
  *
@@ -101,10 +101,11 @@
       disable_keyboard: (boolean|undefined),
       wasm_fn: (Function|undefined),
       screen: ({
-          disable_autoscale: (boolean|undefined),
+          scale: (number|undefined),
       } | undefined),
     }} options
  * @constructor
+ * @export
  */
 function V86(options)
 {
@@ -303,6 +304,7 @@ V86.prototype.continue_init = async function(emulator, options)
     settings.preserve_mac_from_state_image = options.preserve_mac_from_state_image;
     settings.mac_address_translation = options.mac_address_translation;
     settings.cpuid_level = options.cpuid_level;
+    settings.virtio_balloon = options.virtio_balloon;
     settings.virtio_console = options.virtio_console;
     settings.virtio_net = options.virtio_net;
     settings.screen_options = options.screen_options;
@@ -313,11 +315,16 @@ V86.prototype.continue_init = async function(emulator, options)
         // TODO: remove bus, use direct calls instead
         if(relay_url === "fetch")
         {
-            this.network_adapter = new FetchNetworkAdapter(this.bus);
+            this.network_adapter = new FetchNetworkAdapter(this.bus, options.net_device);
+        }
+        else if(relay_url === "inbrowser")
+        {
+            // NOTE: experimental, will change when usage of options.net_device gets refactored in favour of emulator.bus
+            this.network_adapter = new InBrowserNetworkAdapter(this.bus, options.net_device);
         }
         else if(relay_url.startsWith("wisp://") || relay_url.startsWith("wisps://"))
         {
-            this.network_adapter = new WispNetworkAdapter(relay_url, this.bus, options);
+            this.network_adapter = new WispNetworkAdapter(relay_url, this.bus, options.net_device);
         }
         else
         {
@@ -1339,7 +1346,7 @@ V86.prototype.automatically = function(steps)
 
         if(step.keyboard_send)
         {
-            if(step.keyboard_send instanceof Array)
+            if(Array.isArray(step.keyboard_send))
             {
                 this.keyboard_send_scancodes(step.keyboard_send);
             }
@@ -1389,7 +1396,7 @@ V86.prototype.wait_until_vga_screen_contains = function(text)
         function put_char(args)
         {
             const [row, col, char] = args;
-            changed_rows.add(col);
+            changed_rows.add(row);
         }
 
         const check = () =>
@@ -1467,18 +1474,3 @@ function FileNotFoundError(message)
     this.message = message || "File not found";
 }
 FileNotFoundError.prototype = Error.prototype;
-
-// Closure Compiler's way of exporting
-if(typeof module !== "undefined" && typeof module.exports !== "undefined")
-{
-    module.exports["V86"] = V86;
-}
-else if(typeof window !== "undefined")
-{
-    window["V86"] = V86;
-}
-else if(typeof importScripts === "function")
-{
-    // web worker
-    self["V86"] = V86;
-}

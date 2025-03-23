@@ -20,8 +20,8 @@ endif
 WASM_OPT ?= false
 
 default: build/v86-debug.wasm
-all: build/v86_all.js build/libv86.js build/v86.wasm
-all-debug: build/libv86-debug.js build/v86-debug.wasm
+all: build/v86_all.js build/libv86.js build/libv86.mjs build/v86.wasm
+all-debug: build/libv86-debug.js build/libv86-debug.mjs build/v86-debug.wasm
 browser: build/v86_all.js
 
 # Used for nodejs builds and in order to profile code.
@@ -79,15 +79,16 @@ CARGO_FLAGS_SAFE=\
 CARGO_FLAGS=$(CARGO_FLAGS_SAFE) -C target-feature=+bulk-memory -C target-feature=+multivalue -C target-feature=+simd128
 
 CORE_FILES=const.js config.js io.js main.js lib.js buffer.js ide.js pci.js floppy.js \
-	   memory.js dma.js pit.js vga.js vga_text.js ps2.js rtc.js uart.js \
+	   memory.js dma.js pit.js vga.js ps2.js rtc.js uart.js \
 	   acpi.js apic.js ioapic.js \
-	   state.js ne2k.js sb16.js virtio.js virtio_console.js virtio_net.js \
+	   state.js ne2k.js sb16.js virtio.js virtio_console.js virtio_net.js virtio_balloon.js \
 	   bus.js log.js cpu.js debug.js \
 	   elf.js kernel.js
 LIB_FILES=9p-filer.js filesystem.js jor1k.js marshall.js
 BROWSER_FILES=screen.js keyboard.js mouse.js speaker.js serial.js \
 	      network.js starter.js worker_bus.js dummy_screen.js \
-	      fake_network.js wisp_network.js fetch_network.js print_stats.js filestorage.js
+	      inbrowser_network.js fake_network.js wisp_network.js fetch_network.js \
+          print_stats.js filestorage.js
 
 RUST_FILES=$(shell find src/rust/ -name '*.rs') \
 	   src/rust/gen/interpreter.rs src/rust/gen/interpreter0f.rs \
@@ -142,6 +143,23 @@ build/libv86.js: $(CLOSURE) src/*.js lib/*.js src/browser/*.js
 		--js $(LIB_FILES)
 	ls -lh build/libv86.js
 
+build/libv86.mjs: $(CLOSURE) src/*.js lib/*.js src/browser/*.js
+	mkdir -p build
+	-ls -lh build/libv86.js
+	java -jar $(CLOSURE) \
+		--js_output_file build/libv86.mjs\
+		--define=DEBUG=false\
+		$(CLOSURE_FLAGS)\
+		--compilation_level SIMPLE\
+		--jscomp_off=missingProperties\
+		--output_wrapper ';let module = {exports:{}}; %output%; export default module.exports.V86;'\
+		--js $(CORE_FILES)\
+		--js $(BROWSER_FILES)\
+		--js $(LIB_FILES)\
+		--chunk_output_type=ES_MODULES\
+		--emit_use_strict=false
+	ls -lh build/libv86.mjs
+
 build/libv86-debug.js: $(CLOSURE) src/*.js lib/*.js src/browser/*.js
 	mkdir -p build
 	java -jar $(CLOSURE) \
@@ -155,6 +173,22 @@ build/libv86-debug.js: $(CLOSURE) src/*.js lib/*.js src/browser/*.js
 		--js $(CORE_FILES)\
 		--js $(BROWSER_FILES)\
 		--js $(LIB_FILES)
+
+build/libv86-debug.mjs: $(CLOSURE) src/*.js lib/*.js src/browser/*.js
+	mkdir -p build
+	java -jar $(CLOSURE) \
+		--js_output_file build/libv86-debug.mjs\
+		--define=DEBUG=true\
+		$(CLOSURE_FLAGS)\
+		--compilation_level SIMPLE\
+		--jscomp_off=missingProperties\
+		--output_wrapper ';let module = {exports:{}}; %output%; export default module.exports.V86; export let {V86, CPU} = module.exports;'\
+		--js $(CORE_FILES)\
+		--js $(BROWSER_FILES)\
+		--js $(LIB_FILES)\
+		--chunk_output_type=ES_MODULES\
+		--emit_use_strict=false
+	ls -lh build/libv86-debug.mjs
 
 src/rust/gen/jit.rs: $(JIT_DEPENDENCIES)
 	./gen/generate_jit.js --output-dir build/ --table jit
@@ -222,6 +256,7 @@ build/zstddeclib.o: lib/zstd/zstddeclib.c
 
 clean:
 	-rm build/libv86.js
+	-rm build/libv86.mjs
 	-rm build/libv86-debug.js
 	-rm build/v86_all.js
 	-rm build/v86.wasm
@@ -259,39 +294,39 @@ build/integration-test-fs/fs.json: images/buildroot-bzimage68.bin
 	./tools/copy-to-sha256.py build/integration-test-fs/fs.tar build/integration-test-fs/flat
 	rm build/integration-test-fs/fs.tar build/integration-test-fs/bzImage build/integration-test-fs/initrd
 
-tests: all-debug build/integration-test-fs/fs.json
-	./tests/full/run.js
+tests: build/libv86-debug.js build/v86-debug.wasm build/integration-test-fs/fs.json
+	LOG_LEVEL=3 ./tests/full/run.js
 
 tests-release: build/libv86.js build/v86.wasm build/integration-test-fs/fs.json
 	TEST_RELEASE_BUILD=1 ./tests/full/run.js
 
-nasmtests: all-debug
+nasmtests: build/libv86-debug.js build/v86-debug.wasm
 	$(NASM_TEST_DIR)/create_tests.js
 	$(NASM_TEST_DIR)/gen_fixtures.js
 	$(NASM_TEST_DIR)/run.js
 
-nasmtests-force-jit: all-debug
+nasmtests-force-jit: build/libv86-debug.js build/v86-debug.wasm
 	$(NASM_TEST_DIR)/create_tests.js
 	$(NASM_TEST_DIR)/gen_fixtures.js
 	$(NASM_TEST_DIR)/run.js --force-jit
 
-jitpagingtests: all-debug
+jitpagingtests: build/libv86-debug.js build/v86-debug.wasm
 	$(MAKE) -C tests/jit-paging test-jit
 	./tests/jit-paging/run.js
 
-qemutests: all-debug
+qemutests: build/libv86-debug.js build/v86-debug.wasm
 	$(MAKE) -C tests/qemu test-i386
-	./tests/qemu/run.js > build/qemu-test-result
+	LOG_LEVEL=3 ./tests/qemu/run.js build/qemu-test-result
 	./tests/qemu/run-qemu.js > build/qemu-test-reference
 	diff build/qemu-test-result build/qemu-test-reference
 
 qemutests-release: build/libv86.js build/v86.wasm
 	$(MAKE) -C tests/qemu test-i386
-	TEST_RELEASE_BUILD=1 time ./tests/qemu/run.js > build/qemu-test-result
+	TEST_RELEASE_BUILD=1 time ./tests/qemu/run.js build/qemu-test-result
 	./tests/qemu/run-qemu.js > build/qemu-test-reference
 	diff build/qemu-test-result build/qemu-test-reference
 
-kvm-unit-test: all-debug
+kvm-unit-test: build/libv86-debug.js build/v86-debug.wasm
 	(cd tests/kvm-unit-tests && ./configure && make x86/realmode.flat)
 	tests/kvm-unit-tests/run.js tests/kvm-unit-tests/x86/realmode.flat
 
@@ -299,16 +334,17 @@ kvm-unit-test-release: build/libv86.js build/v86.wasm
 	(cd tests/kvm-unit-tests && ./configure && make x86/realmode.flat)
 	TEST_RELEASE_BUILD=1 tests/kvm-unit-tests/run.js tests/kvm-unit-tests/x86/realmode.flat
 
-expect-tests: all-debug build/libwabt.js
+expect-tests: build/libv86-debug.js build/v86-debug.wasm build/libwabt.js
 	make -C tests/expect/tests
 	./tests/expect/run.js
 
-devices-test: all-debug
+devices-test: build/libv86-debug.js build/v86-debug.wasm
 	./tests/devices/virtio_9p.js
 	./tests/devices/virtio_console.js
 	./tests/devices/fetch_network.js
 	USE_VIRTIO=1 ./tests/devices/fetch_network.js
 	./tests/devices/wisp_network.js
+	./tests/devices/virtio_balloon.js
 
 rust-test: $(RUST_FILES)
 	env RUSTFLAGS="-D warnings" RUST_BACKTRACE=full RUST_TEST_THREADS=1 cargo test -- --nocapture
@@ -317,13 +353,16 @@ rust-test: $(RUST_FILES)
 rust-test-intensive:
 	QUICKCHECK_TESTS=100000000 make rust-test
 
-api-tests: all-debug
-#	./tests/api/clean-shutdown.js \
-	./tests/api/reset.js \
-	./tests/api/floppy-insert-eject.js \
-	./tests/api/serial.js \
+api-tests: build/libv86-debug.js build/v86-debug.wasm
+	./tests/api/clean-shutdown.js
+	./tests/api/state.js
+	./tests/api/reset.js
+	#./tests/api/floppy-insert-eject.js # disabled for now, sometimes hangs
+	./tests/api/serial.js
+	./tests/api/reboot.js
+	./tests/api/pic.js
 
-all-tests: eslint kvm-unit-test qemutests qemutests-release jitpagingtests api-tests nasmtests nasmtests-force-jit tests expect-tests
+all-tests: eslint kvm-unit-test qemutests qemutests-release jitpagingtests api-tests nasmtests nasmtests-force-jit rust-test tests expect-tests
 	# Skipping:
 	# - devices-test (hangs)
 

@@ -12,10 +12,11 @@ mod ext {
     }
 }
 
-use cpu::cpu::reg128;
-use cpu::global_pointers::memory_size;
-use cpu::vga;
-use page::Page;
+use crate::cpu::cpu::reg128;
+use crate::cpu::global_pointers::memory_size;
+use crate::cpu::vga;
+use crate::jit;
+use crate::page::Page;
 
 use std::alloc;
 use std::ptr;
@@ -38,7 +39,9 @@ pub fn allocate_memory(size: u32) -> u32 {
 }
 
 #[no_mangle]
-pub unsafe fn zero_memory(size: u32) { ptr::write_bytes(mem8, 0, size as usize); }
+pub unsafe fn zero_memory(addr: u32, size: u32) {
+    ptr::write_bytes(mem8.offset(addr as isize), 0, size as usize);
+}
 
 #[allow(non_upper_case_globals)]
 pub static mut vga_mem8: *mut u8 = ptr::null_mut();
@@ -51,17 +54,17 @@ pub fn svga_allocate_memory(size: u32) -> u32 {
         dbg_assert!(vga_mem8.is_null());
     };
     let layout = alloc::Layout::from_size_align(size as usize, 0x1000).unwrap();
-    let ptr = unsafe { alloc::alloc(layout) as u32 };
+    let ptr = unsafe { alloc::alloc(layout) };
     dbg_assert!(
         size & (1 << 12 << 6) == 0,
         "size not aligned to dirty_bitmap"
     );
     unsafe {
-        vga_mem8 = ptr as *mut u8;
+        vga_mem8 = ptr;
         vga_memory_size = size;
-        vga::dirty_bitmap.resize((size >> 12 >> 6) as usize, 0);
+        vga::set_dirty_bitmap_size(size >> 12 >> 6);
     };
-    ptr
+    ptr as u32
 }
 
 #[no_mangle]
@@ -172,7 +175,7 @@ pub unsafe fn write8(addr: u32, value: i32) {
         mmap_write8(addr, value & 0xFF);
     }
     else {
-        ::jit::jit_dirty_page(::jit::get_jit_state(), Page::page_of(addr));
+        jit::jit_dirty_page(Page::page_of(addr));
         write8_no_mmap_or_dirty_check(addr, value);
     };
 }
@@ -187,7 +190,7 @@ pub unsafe fn write16(addr: u32, value: i32) {
         mmap_write16(addr, value & 0xFFFF);
     }
     else {
-        ::jit::jit_dirty_cache_small(addr, addr + 2);
+        jit::jit_dirty_cache_small(addr, addr + 2);
         write16_no_mmap_or_dirty_check(addr, value);
     };
 }
@@ -201,7 +204,7 @@ pub unsafe fn write32(addr: u32, value: i32) {
         mmap_write32(addr, value);
     }
     else {
-        ::jit::jit_dirty_cache_small(addr, addr + 4);
+        jit::jit_dirty_cache_small(addr, addr + 4);
         write32_no_mmap_or_dirty_check(addr, value);
     };
 }
@@ -308,4 +311,16 @@ pub unsafe fn mmap_write128(addr: u32, v0: u64, v1: u64) {
             (v1 >> 32) as i32,
         )
     }
+}
+
+#[no_mangle]
+pub unsafe fn is_memory_zeroed(addr: u32, length: u32) -> bool {
+    dbg_assert!(addr % 8 == 0);
+    dbg_assert!(length % 8 == 0);
+    for i in (addr..addr + length).step_by(8) {
+        if *(mem8.offset(i as isize) as *const i64) != 0 {
+            return false;
+        }
+    }
+    return true;
 }

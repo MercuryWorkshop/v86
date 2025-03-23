@@ -11,39 +11,17 @@ const V86_ROOT = path.join(__dirname, "../..");
 
 const LOG_SERIAL = true;
 
-if(true)
-{
-    var emulator = new V86({
-        bios: { url: __dirname + "/../../bios/seabios.bin" },
-        vga_bios: { url: __dirname + "/../../bios/vgabios.bin" },
-        cdrom: { url: __dirname + "/../../images/linux3.iso" },
-        autostart: true,
-        memory_size: 32 * 1024 * 1024,
-        disable_jit: +process.env.DISABLE_JIT,
-        log_level: 0,
-    });
-}
-else
-{
-    var emulator = new V86({
-        bios: { url: path.join(V86_ROOT, "/bios/seabios.bin") },
-        vga_bios: { url: path.join(V86_ROOT, "/bios/vgabios.bin") },
-        autostart: true,
-        memory_size: 512 * 1024 * 1024,
-        vga_memory_size: 8 * 1024 * 1024,
-        network_relay_url: "<UNUSED>",
-        bzimage_initrd_from_filesystem: true,
-        cmdline: "rw console=ttyS0 apm=off root=host9p rootfstype=9p rootflags=trans=virtio,cache=loose mitigations=off audit=0 tsc=reliable nowatchdog init=/usr/bin/init-openrc",
-        filesystem: {
-            basefs: {
-                url: path.join(V86_ROOT, "/images/fs.json"),
-            },
-            baseurl: path.join(V86_ROOT, "/images/arch/"),
-        },
-        disable_jit: +process.env.DISABLE_JIT,
-        log_level: 0,
-    });
-}
+
+var emulator = new V86({
+    bios: { url: __dirname + "/../../bios/seabios.bin" },
+    vga_bios: { url: __dirname + "/../../bios/vgabios.bin" },
+    cdrom: { url: __dirname + "/../../images/linux3.iso" },
+    autostart: true,
+    memory_size: 1024 * 1024 * 1024,
+    disable_jit: +process.env.DISABLE_JIT,
+    log_level: 0,
+});
+
 
 emulator.bus.register("emulator-started", function()
 {
@@ -68,6 +46,9 @@ emulator.add_listener("serial0-output-byte", function(byte)
 
     if(serial_text.endsWith("~% ") || serial_text.endsWith("root@localhost:~# "))
     {
+        console.log("Creating snapshots");
+        const start_time = Date.now();
+        for(var i = 0; i < 10; ++i) emulator.save_state();
         const end_time = Date.now();
         const elapsed = end_time - start_time;
         console.log("Done in %dms", elapsed);

@@ -26,7 +26,7 @@ list of emulated hardware:
 - A PCI bus. This one is partly incomplete and not used by every device.
 - An IDE disk controller.
 - An NE2000 (RTL8390) PCI network card.
-- A VirtIO filesystem.
+- Various virtio devices: Filesystem, network and balloon.
 - A SoundBlaster 16 sound card.
 
 ## Demos
@@ -62,7 +62,8 @@ list of emulated hardware:
 [Networking](docs/networking.md) —
 [Alpine Linux guest setup](tools/docker/alpine/) —
 [Arch Linux guest setup](docs/archlinux.md) —
-[Windows 2000/XP guest setup](docs/windows-xp.md) —
+[Windows NT guest setup](docs/windows-nt.md) —
+[Windows 9x guest setup](docs/windows-9x.md) —
 [9p filesystem](docs/filesystem.md) —
 [Linux rootfs on 9p](docs/linux-9p-image.md) —
 [Profiling](docs/profiling.md) —
@@ -73,19 +74,13 @@ list of emulated hardware:
 Here's an overview of the operating systems supported in v86:
 
 - Linux works pretty well. 64-bit kernels are not supported.
-  - Damn Small Linux (2.4.31 kernel) works.
-  - Fedora 30 works.
-  - All tested versions of TinyCore work.
   - [Buildroot](https://buildroot.uclibc.org) can be used to build a minimal image.
     [humphd/browser-vm](https://github.com/humphd/browser-vm) and
     [darin755/browser-buildroot](https://github.com/Darin755/browser-buildroot) have some useful scripts for building one.
   - [SkiffOS](https://github.com/skiffos/SkiffOS/tree/master/configs/browser/v86) (based on Buildroot) can cross-compile a custom image.
-  - Arch Linux 32 works. See [archlinux.md](docs/archlinux.md) for building an image.
-  - Debian works.
-  - Ubuntu works up to the latest version that supported i386 (16.04 LTS or 18.04 LTS for some variants).
+  - Ubuntu and other Debian derivatives works up to the latest version that supported i386 (16.04 LTS or 18.04 LTS for some variants).
   - Alpine Linux works. An image can be built from a Dockerfile, see [tools/docker/alpine/](tools/docker/alpine/).
-  - Slackware works.
-  - Void Linux works.
+  - Arch Linux 32 works. See [archlinux.md](docs/archlinux.md) for building an image.
 - ReactOS works.
 - FreeDOS, Windows 1.01 and MS-DOS run very well.
 - KolibriOS works.
@@ -94,8 +89,9 @@ Here's an overview of the operating systems supported in v86:
 - Windows 1, 3.x, 95, 98, ME, NT and 2000 work reasonably well.
   - In Windows 2000 and higher the PC type has to be changed from ACPI PC to Standard PC
   - There are some known boot issues ([#250](https://github.com/copy/v86/issues/250), [#433](https://github.com/copy/v86/issues/433), [#507](https://github.com/copy/v86/issues/507), [#555](https://github.com/copy/v86/issues/555), [#620](https://github.com/copy/v86/issues/620), [#645](https://github.com/copy/v86/issues/645))
+  - See [Windows 9x guest setup](docs/windows-9x.md)
 - Windows XP, Vista and 8 work under certain conditions (see [#86](https://github.com/copy/v86/issues/86), [#208](https://github.com/copy/v86/issues/208))
-  - See [Windows 2000/XP guest setup](docs/windows-xp.md)
+  - See [Windows NT guest setup](docs/windows-nt.md)
 - Many hobby operating systems work.
 - 9front works.
 - Plan 9 doesn't work.
@@ -166,6 +162,8 @@ See [tests/Readme.md](tests/Readme.md) for more information.
 - [Programatically using the serial terminal](examples/serial.html)
 - [A Lua interpreter](examples/lua.html)
 - [Two instances in one window](examples/two_instances.html)
+- [Networking between browser windows/tabs using the Broadcast Channel API](examples/broadcast-network.html)
+- [TCP Terminal (fetch-based networking)](examples/tcp_terminal.html)
 - [Saving and restoring emulator state](examples/save_restore.html)
 
 Using v86 for your own purposes is as easy as:
@@ -213,7 +211,3 @@ repository under their own licenses:
 ## More questions?
 
 Shoot me an email to `copy@copy.sh`. Please report bugs on GitHub.
-
-## Author
-
-Fabian Hemmer (https://copy.sh/, `copy@copy.sh`)

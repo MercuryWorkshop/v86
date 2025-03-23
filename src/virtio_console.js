@@ -57,7 +57,7 @@ function VirtioConsole(cpu, bus)
     this.virtio = new VirtIO(cpu,
     {
         name: "virtio-console",
-        pci_id: 0x07 << 3,
+        pci_id: 0x0C << 3,
         device_id: 0x1043,
         subsystem_device_id: 3,
         common:
@@ -80,10 +80,7 @@ function VirtioConsole(cpu, bus)
             [
                 (queue_id) =>
                 {
-                    const queue = this.virtio.queues[queue_id];
 
-                    // TODO: Full buffer looks like an empty buffer so prevent it from filling
-                    while(queue.count_requests() > queue.size - 2) queue.pop_request();
                 },
                 (queue_id) =>
                 {
@@ -215,21 +212,25 @@ function VirtioConsole(cpu, bus)
         }, this);
 
         this.bus.register("virtio-console" + port + "-resize", function(size) {
-            this.cols = size[0];
-            this.rows = size[1];
+            if(port === 0) {
+                this.cols = size[0];
+                this.rows = size[1];
+            }
 
             if(this.virtio.queues[2].is_configured() && this.virtio.queues[2].has_request()) {
-                this.SendWindowSize(port);
+                this.SendWindowSize(port, size[0], size[1]);
             }
         }, this);
     }
 }
 
-VirtioConsole.prototype.SendWindowSize = function(port)
+VirtioConsole.prototype.SendWindowSize = function(port, cols = undefined, rows = undefined)
 {
+    rows = rows || this.rows;
+    cols = cols || this.cols;
     const bufchain = this.virtio.queues[2].pop_request();
     const buf = new Uint8Array(12);
-    marshall.Marshall(["w", "h", "h", "h", "h"], [port, VIRTIO_CONSOLE_RESIZE, 0, this.rows, this.cols], buf, 0);
+    marshall.Marshall(["w", "h", "h", "h", "h"], [port, VIRTIO_CONSOLE_RESIZE, 0, rows, cols], buf, 0);
     this.Send(2, bufchain, buf);
 };
 
