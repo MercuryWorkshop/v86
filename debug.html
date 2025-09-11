@@ -2,60 +2,11 @@
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 
 <title>v86 (debug)</title>
-<meta name="viewport" content="width=device-width,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<meta name="viewport" content="width=device-width,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no,interactive-widget=resizes-content">
 
-<script src="src/const.js"></script>
-<script src="src/config.js"></script>
-<script src="src/log.js"></script>
-<script src="src/lib.js"></script>
-<script src="src/buffer.js"></script>
-<script src="src/cpu.js"></script>
-<script src="src/debug.js"></script>
-<script src="src/io.js"></script>
-<script src="src/main.js"></script>
-<script src="src/ide.js"></script>
-<script src="src/pci.js"></script>
-<script src="src/floppy.js"></script>
-<script src="src/memory.js"></script>
-<script src="src/dma.js"></script>
-<script src="src/pit.js"></script>
-<script src="src/vga.js"></script>
-<script src="src/ps2.js"></script>
-<script src="src/rtc.js"></script>
-<script src="src/uart.js"></script>
-<script src="src/acpi.js"></script>
-<script src="src/apic.js"></script>
-<script src="src/ioapic.js"></script>
-<script src="src/sb16.js"></script>
-<script src="src/ne2k.js"></script>
-<script src="src/state.js"></script>
-<script src="src/virtio.js"></script>
-<script src="src/virtio_balloon.js"></script>
-<script src="src/virtio_console.js"></script>
-<script src="src/virtio_net.js"></script>
-<script src="src/bus.js"></script>
-<script src="src/elf.js"></script>
-<script src="src/kernel.js"></script>
-<script src="src/browser/main.js"></script>
-<script src="src/browser/screen.js"></script>
-<script src="src/browser/keyboard.js"></script>
-<script src="src/browser/mouse.js"></script>
-<script src="src/browser/speaker.js"></script>
-<script src="src/browser/serial.js"></script>
-<script src="src/browser/network.js"></script>
-<script src="src/browser/fake_network.js"></script>
-<script src="src/browser/fetch_network.js"></script>
-<script src="src/browser/wisp_network.js"></script>
-<script src="src/browser/starter.js"></script>
-<script src="src/browser/worker_bus.js"></script>
-<script src="src/browser/print_stats.js"></script>
-<script src="src/browser/filestorage.js"></script>
-<script src="lib/jor1k.js"></script>
-<script src="lib/9p.js"></script>
-<script src="lib/filesystem.js"></script>
-<script src="lib/marshall.js"></script>
 <script src="build/capstone-x86.min.js"></script>
-<script src="build/libwabt.js"></script>
+<script src="build/libwabt.cjs"></script>
+<script type="module" src="src/browser/main.js"></script>
 
 <link rel="stylesheet" href="v86.css">
 
@@ -136,17 +87,22 @@
 
             <tr>
                 <td><label for="floppy_image">Floppy disk image</label></td>
-                <td> <input type="file" id="floppy_image"><br></td>
+                <td><input type="file" id="fda_image"> or <a id="fda_toggle_empty_disk">create empty floppy disk</a><br></td>
+            </tr>
+
+            <tr>
+                <td><label for="floppy_image">Second floppy disk image</label></td>
+                <td><input type="file" id="fdb_image"> or <a id="fdb_toggle_empty_disk">create empty floppy disk</a><br></td>
             </tr>
 
             <tr>
                 <td><label for="hda_image">Hard disk image</label></td>
-                <td><input type="file" id="hda_image"><br></td>
+                <td><input type="file" id="hda_image"> or <a id="hda_toggle_empty_disk">create empty hard disk</a><br></td>
             </tr>
 
             <tr>
                 <td>Second hard disk image</td>
-                <td><input type="file" id="hdb_image"><br></td>
+                <td><input type="file" id="hdb_image"> or <a id="hdb_toggle_empty_disk">create empty hard disk</a><br></td>
             </tr>
 
             <tr>
@@ -166,6 +122,11 @@
             <tr>
                 <td><label for="bios">BIOS</label></td>
                 <td><input type="file" id="bios"><br></td>
+            </tr>
+
+            <tr>
+                <td><label for="vga_bios">VGA BIOS</label></td>
+                <td><input type="file" id="vga_bios"><br></td>
             </tr>
 
             <tr>
@@ -256,6 +217,8 @@
         <input type="button" value="Get second hard disk image" id="get_hdb_image">
         <input type="button" value="Get CD-ROM image" id="get_cdrom_image">
         <input type="button" value="Insert floppy image" id="change_fda_image">
+        <input type="button" value="Insert second floppy image" id="change_fdb_image">
+        <input type="button" value="Insert CD image" id="change_cdrom_image">
         <input type="button" value="Save State" id="save_state">
         <input type="button" value="Load State" id="load_state"> <input type="file" style="display: none" id="load_state_input">
         <input type="button" value="Memory Dump" id="memory_dump">
@@ -265,13 +228,13 @@
         <input type="button" value="Go fullscreen" id="fullscreen">
         <input type="button" value="Take screenshot" id="take_screenshot">
         <input type="button" value="Mute" id="mute">
+        <input type="button" value="Enable theatre mode" id="toggle_theatre">
+        <input type="button" style="display: none" value="Enable zoom to fit" id="toggle_zoom_to_fit">
 
         <label>
             Scale:
             <input type="number" min="0.25" step="0.25" value="1.0" id="scale" style="width: 50px">
         </label>
-
-        <br>
     </div>
 
     <pre style="margin: 0" id="log_levels"></pre>
@@ -345,3 +308,6 @@
 </textarea>
 
 <div id="terminal"></div>
+
+<input type="button" value="Hide UI" id="toggle_ui" style="display: none">
+<div id="theatre_background" style="display: none"></div>

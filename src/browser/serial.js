@@ -1,11 +1,14 @@
-"use strict";
+import { dbg_assert, dbg_log } from "../log.js";
+
+// For Types Only
+import { BusConnector } from "../bus.js";
 
 /**
  * @constructor
  *
  * @param {BusConnector} bus
  */
-function SerialAdapter(element, bus)
+export function SerialAdapter(element, bus)
 {
     var serial = this;
 
@@ -216,7 +219,7 @@ function SerialRecordingAdapter(bus)
  * @constructor
  * @param {BusConnector} bus
  */
-function SerialAdapterXtermJS(element, bus)
+export function SerialAdapterXtermJS(element, bus)
 {
     this.element = element;
 
@@ -227,6 +230,7 @@ function SerialAdapterXtermJS(element, bus)
 
     var term = this.term = new window["Terminal"]({
         "logLevel": "off",
+        "convertEol": "true",
     });
     term.write("This is the serial console. Whatever you type or paste here will be sent to COM1");
 

@@ -1,4 +1,10 @@
-"use strict";
+import { dbg_assert } from "./log.js";
+import { VirtIO, VIRTIO_F_VERSION_1 } from "./virtio.js";
+import * as marshall from "../lib/marshall.js";
+
+// For Types Only
+import { CPU } from "./cpu.js";
+import { BusConnector } from "./bus.js";
 
 // https://docs.oasis-open.org/virtio/virtio/v1.2/csd01/virtio-v1.2-csd01.html#x1-2900003
 
@@ -20,7 +26,7 @@ const VIRTIO_CONSOLE_F_EMERG_WRITE    = 2;
  *
  * @param {CPU} cpu
  */
-function VirtioConsole(cpu, bus)
+export function VirtioConsole(cpu, bus)
 {
     /** @const @type {BusConnector} */
     this.bus = bus;

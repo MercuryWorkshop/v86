@@ -25,6 +25,7 @@ list of emulated hardware:
 - A generic VGA card with SVGA support and Bochs VBE Extensions.
 - A PCI bus. This one is partly incomplete and not used by every device.
 - An IDE disk controller.
+  - A built-in ISO 9660 CD-ROM generator.
 - An NE2000 (RTL8390) PCI network card.
 - Various virtio devices: Filesystem, network and balloon.
 - A SoundBlaster 16 sound card.
@@ -148,7 +149,7 @@ for a full setup on Debian or
 The disk images for testing are not included in this repository. You can
 download them directly from the website using:
 
-`wget -P images/ https://i.copy.sh/{linux3.iso,linux.iso,linux4.iso,buildroot-bzimage68.bin,openbsd-floppy.img,kolibri.img,windows101.img,os8.img,freedos722.img}`
+`curl --compressed --output-dir images/ --remote-name-all https://i.copy.sh/{linux.iso,linux3.iso,linux4.iso,buildroot-bzimage68.bin,TinyCore-11.0.iso,oberon.img,msdos.img,openbsd-floppy.img,kolibri.img,windows101.img,os8.img,freedos722.img,mobius-fd-release5.img,msdos622.img}`
 
 Run integration tests: `make tests`
 
@@ -196,6 +197,7 @@ repository under their own licenses:
 - [`lib/zstd/zstddeclib.c`](lib/zstd/zstddeclib.c)
 - [`tests/kvm-unit-tests/`](tests/kvm-unit-tests)
 - [`tests/qemutests/`](tests/qemutests)
+- [`src/floppy.js/`](src/floppy.js) contains parts ported from qemu under the MIT license, see LICENSE.MIT.
 
 ## Credits
 
