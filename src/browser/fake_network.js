@@ -324,6 +324,7 @@ function handle_fake_dns_static(packet, adapter)
 
 function handle_fake_dns_doh(packet, adapter)
 {
+    const fetch = (window.anura?.net?.fetch) || window.fetch;
     const fetch_url = `https://${adapter.doh_server || DEFAULT_DOH_SERVER}/dns-query`;
     const fetch_opts = {
         method: "POST",
