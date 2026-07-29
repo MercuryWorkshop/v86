@@ -48,7 +48,8 @@ export function WispNetworkAdapter(wisp_url, bus, config)
 }
 
 WispNetworkAdapter.prototype.register_ws = function(wisp_url) {
-    this.wispws = new WebSocket(wisp_url.replace("wisp://", "ws://").replace("wisps://", "wss://"));
+    const preferred_websocket_impl = (window.anura?.net?.bus.getFakeWispProxySocket()) || WebSocket
+    this.wispws = new preferred_websocket_impl(wisp_url.replace("wisp://", "ws://").replace("wisps://", "wss://"));
     this.wispws.binaryType = "arraybuffer";
     this.wispws.onmessage = (event) => {
         this.process_incoming_wisp_frame(new Uint8Array(event.data));
