@@ -205,6 +205,11 @@ V86.prototype.continue_init = async function(emulator, options)
 
     var settings = {};
 
+    // anuraOS: expose loaded disk image buffer objects (e.g. AsyncFileBuffer
+    // with its block_cache) so the host can reach them via
+    // emulator.disk_images.hda.block_cache for persistence.
+    this.disk_images = {};
+
     const boot_order =
         options.boot_order ? options.boot_order :
         options.fda ? BOOT_ORDER_FD_FIRST :
@@ -357,18 +362,23 @@ V86.prototype.continue_init = async function(emulator, options)
         {
             case "hda":
                 settings.hda = buffer;
+                starter.disk_images.hda = buffer;
                 break;
             case "hdb":
                 settings.hdb = buffer;
+                starter.disk_images.hdb = buffer;
                 break;
             case "cdrom":
                 settings.cdrom = buffer;
+                starter.disk_images.cdrom = buffer;
                 break;
             case "fda":
                 settings.fda = buffer;
+                starter.disk_images.fda = buffer;
                 break;
             case "fdb":
                 settings.fdb = buffer;
+                starter.disk_images.fdb = buffer;
                 break;
 
             case "multiboot":
